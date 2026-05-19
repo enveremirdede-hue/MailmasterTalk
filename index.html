@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MailmasterTalk Mega Pro - v4</title>
+    <title>MailmasterTalk Mega Pro - v5.6</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -43,13 +43,33 @@
         .filter-sepia { filter: sepia(85%) saturate(1.2); }
         .filter-none { filter: none; }
 
-        @keyframes emojiUp {
-            0% { transform: translateY(0) scale(0.6); opacity: 0; }
-            10% { opacity: 1; }
-            90% { opacity: 1; }
-            100% { transform: translateY(-75vh) scale(2.2) rotate(15deg); opacity: 0; }
+        /* KESİN ÇÖZÜM: SENKRONİZE EDİLMİŞ EMOJI ANİMASYONU */
+        @keyframes emojiAnimation {
+            0% { 
+                transform: translateY(0) scale(0.6) rotate(0deg); 
+                opacity: 0; 
+            }
+            10% { 
+                opacity: 1; 
+            }
+            75% { 
+                opacity: 1; /* %75'e kadar net görünür */
+            }
+            100% { 
+                /* Kenarlardan kesilmemesi için scale 1.5, tavanda kalması için -90vh */
+                transform: translateY(-90vh) scale(1.5) rotate(20deg); 
+                opacity: 0; 
+            }
         }
-        .neon-emoji { position: fixed; bottom: 100px; font-size: 4rem; pointer-events: none; animation: emojiUp 2.5s cubic-bezier(0.1, 0.8, 0.3, 1) forwards; z-index: 99999; filter: drop-shadow(0 0 15px #00ffcc) drop-shadow(0 0 30px #ff00ff); }
+        .neon-emoji { 
+            position: fixed; 
+            bottom: 100px; 
+            font-size: 4.5rem; 
+            pointer-events: none; 
+            z-index: 999999; 
+            animation: emojiAnimation 3.0s ease-out forwards; /* Tam 3 saniye sürer */
+            filter: drop-shadow(0 0 15px #00ffcc) drop-shadow(0 0 30px #ff00ff); 
+        }
 
         .wb-tool { padding: 4px 8px; border-radius: 0.375rem; color: #94a3b8; transition: all 0.2s; }
         .wb-tool:hover { color: #f8fafc; background: rgba(255,255,255,0.1); }
@@ -58,7 +78,6 @@
         .wb-color:hover { transform: scale(1.2); }
         .wb-color.active { border-color: white !important; transform: scale(1.1); box-shadow: 0 0 8px rgba(255,255,255,0.8); }
         
-        /* Ekran paylaşımındaki videonun taşmaması için */
         #screenVideo { object-fit: contain; }
     </style>
 </head>
@@ -85,7 +104,12 @@
     <header class="bg-slate-900/60 border-b border-slate-800/80 p-4 flex justify-between items-center px-6 backdrop-blur-md z-10">
         <div class="flex items-center gap-3">
             <span class="font-black text-xl tracking-tight">Mailmaster<span class="text-emerald-400">Talk</span></span>
-            <span class="bg-emerald-500/10 text-[11px] px-3 py-1 rounded-full text-emerald-400 border border-emerald-500/20 font-bold font-mono">ODA: <span id="current-room-text">...</span></span>
+            <div class="bg-emerald-500/10 text-[11px] px-3 py-1.5 rounded-full text-emerald-400 border border-emerald-500/20 font-bold font-mono flex items-center gap-2">
+                <span>ODA: <span id="current-room-text">...</span></span>
+                <button id="copy-room-link-btn" class="text-slate-400 hover:text-emerald-300 transition-all ml-1" title="Oda Linkini Kopyala">
+                    <i class="fa-regular fa-copy cursor-pointer"></i>
+                </button>
+            </div>
         </div>
         <div class="flex items-center gap-4">
             <div class="bg-slate-950 border border-slate-800 p-1 rounded-xl flex gap-1">
@@ -99,9 +123,7 @@
     </header>
 
     <div class="flex-1 flex overflow-hidden relative p-4 gap-4">
-        
         <div class="flex-1 flex flex-col relative h-full">
-            
             <div id="screen-share-view" class="hidden w-full bg-slate-950 rounded-xl border-2 border-sky-500/50 overflow-hidden mb-4 relative shadow-[0_0_20px_rgba(14,165,233,0.3)]">
                 <video id="screenVideo" autoplay playsinline class="w-full h-full"></video>
                 <div class="user-tag"><i class="fa-solid fa-desktop text-sky-400 mr-2"></i> <span id="screen-owner-name">Ekran Paylaşımı</span></div>
@@ -122,9 +144,7 @@
                         <button class="wb-tool" data-tool="rect" title="Dikdörtgen"><i class="fa-regular fa-square"></i></button>
                         <button class="wb-tool" data-tool="circle" title="Çember"><i class="fa-regular fa-circle"></i></button>
                         <button class="wb-tool" data-tool="line" title="Düz Çizgi"><i class="fa-solid fa-minus"></i></button>
-                        
                         <div class="w-px h-5 bg-slate-700 mx-2"></div>
-                        
                         <div class="flex items-center gap-2">
                             <button class="wb-color w-5 h-5 rounded-full bg-[#1e293b] border-2 border-slate-500 active" data-color="#1e293b"></button>
                             <button class="wb-color w-5 h-5 rounded-full bg-[#ef4444] border-2 border-transparent" data-color="#ef4444"></button>
@@ -167,7 +187,6 @@
             <button id="toggle-mic" class="bg-slate-800 hover:bg-slate-700 text-slate-200 w-12 h-12 rounded-xl flex items-center justify-center text-lg border border-slate-700 shadow-md"><i class="fa-solid fa-microphone"></i></button>
             <button id="toggle-cam" class="bg-slate-800 hover:bg-slate-700 text-slate-200 w-12 h-12 rounded-xl flex items-center justify-center text-lg border border-slate-700 shadow-md"><i class="fa-solid fa-video"></i></button>
             <button id="share-screen" class="bg-slate-800 hover:bg-slate-700 w-12 h-12 rounded-xl flex items-center justify-center text-lg border border-slate-700 text-sky-400 shadow-md transition-all"><i class="fa-solid fa-desktop"></i></button>
-            
             <div class="bg-slate-950 border border-slate-800 px-4 py-2 rounded-xl flex items-center gap-3.5 shadow-inner">
                 <button onclick="sendReaction('✨')" class="hover:scale-125 transition text-2xl">✨</button>
                 <button onclick="sendReaction('🔥')" class="hover:scale-125 transition text-2xl">🔥</button>
@@ -196,16 +215,25 @@
         
         let localStream, screenStream, p2pChannel;
         let peerConnections = {}; 
-        let screenPCs = {}; // EKRAN PAYLAŞIMI İÇİN YENİ PARALEL AĞ
+        let screenPCs = {}; 
         let iceQueues = {};        
         let userName = "Anonim";
+        let currentRoomId = ""; 
         let isScreenSharing = false;
 
-        // BEYAZ TAHTA DEĞİŞKENLERİ
         let isDrawing = false; let currentTool = 'pen'; let currentColor = '#1e293b'; let startX = 0, startY = 0; let wbSnapshot = null;
 
-        // DONANIM KURULUMU
         window.addEventListener('DOMContentLoaded', async () => {
+            if (window.location.protocol.startsWith('http')) {
+                const cleanPath = window.location.pathname.replace('/index.html', '');
+                const pathParts = cleanPath.split('/').filter(Boolean);
+                
+                if (pathParts.length > 0) {
+                    const roomParam = decodeURIComponent(pathParts[0]);
+                    document.getElementById('room-input').value = roomParam;
+                }
+            }
+
             try {
                 localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
                 localVideo.srcObject = localStream;
@@ -219,12 +247,24 @@
             if(!rId || !uName) return alert("Bilgileri doldurun.");
             
             userName = uName;
+            currentRoomId = rId;
             document.getElementById('local-name-tag').innerText = userName + " (Siz)";
             document.getElementById('current-room-text').innerText = rId;
             document.getElementById('lobby-screen').classList.add('hidden');
             
             startTimer();
             initSupabaseMeshNetwork(rId);
+        };
+
+        document.getElementById('copy-room-link-btn').onclick = async () => {
+            if (!currentRoomId) return;
+            const inviteUrl = `${window.location.origin}/${encodeURIComponent(currentRoomId)}`;
+            try {
+                await navigator.clipboard.writeText(inviteUrl);
+                const icon = document.querySelector('#copy-room-link-btn i');
+                icon.className = "fa-solid fa-check text-emerald-400";
+                setTimeout(() => { icon.className = "fa-regular fa-copy cursor-pointer"; }, 2000);
+            } catch (err) { alert("Link kopyalanamadı."); }
         };
 
         function initSupabaseMeshNetwork(roomCode) {
@@ -244,7 +284,6 @@
                     if (targetVideo) targetVideo.className = `filter-${payload.filter}`;
                 })
                 .on('broadcast', { event: 'mic-toggle' }, ({ payload }) => {
-                    // KARŞI TARAFTAN GELEN MİKROFON DURUMU GÜNCELLEMESİ
                     const wrapper = document.getElementById(`wrapper_${payload.userId}`);
                     if (wrapper) {
                         const icon = wrapper.querySelector('.fa-microphone, .fa-microphone-slash');
@@ -254,16 +293,9 @@
                     }
                 })
                 .on('broadcast', { event: 'screen-stop' }, ({ payload }) => {
-                    // KARŞI TARAF EKRAN PAYLAŞIMINI DURDURDUĞUNDA
-                    if (screenPCs[payload.userId]) {
-                        screenPCs[payload.userId].close();
-                        delete screenPCs[payload.userId];
-                    }
-                    screenShareView.classList.add('hidden');
-                    screenShareView.classList.remove('flex-1');
-                    screenVideo.srcObject = null;
-                    videoGrid.classList.remove('screen-active');
-                    videoGrid.classList.add('flex-1');
+                    if (screenPCs[payload.userId]) { screenPCs[payload.userId].close(); delete screenPCs[payload.userId]; }
+                    screenShareView.classList.add('hidden'); screenShareView.classList.remove('flex-1');
+                    screenVideo.srcObject = null; videoGrid.classList.remove('screen-active'); videoGrid.classList.add('flex-1');
                 })
                 .subscribe(async (status) => { if (status === 'SUBSCRIBED') await p2pChannel.track({ name: userName }); });
         }
@@ -279,7 +311,6 @@
         async function handleInboundSignal(data) {
             const rId = data.senderId;
             switch (data.type) {
-                // Normal Kamera Sinyalleri
                 case 'offer':
                     await buildWebRTCLink(rId, data.senderName, false);
                     await peerConnections[rId].setRemoteDescription(new RTCSessionDescription(data.offer));
@@ -298,25 +329,18 @@
                     if (peerConnections[rId] && peerConnections[rId].remoteDescription) await peerConnections[rId].addIceCandidate(new RTCIceCandidate(data.candidate));
                     else { if (!iceQueues[rId]) iceQueues[rId] = []; iceQueues[rId].push(new RTCIceCandidate(data.candidate)); }
                     break;
-                
-                // --- EKRAN PAYLAŞIMI ÖZEL PARALEL SİNYALLER ---
                 case 'screen-offer':
                     const spc = new RTCPeerConnection(rtcConfig);
                     screenPCs[rId] = spc;
                     spc.ontrack = ev => {
                         screenVideo.srcObject = ev.streams[0];
                         document.getElementById('screen-owner-name').innerText = `${data.senderName} Kişisinin Ekranı`;
-                        
-                        // Ekran Paylaşımı Düzenini (Layout) Aktifleştir
-                        screenShareView.classList.remove('hidden');
-                        screenShareView.classList.add('flex-1');
-                        videoGrid.classList.remove('flex-1');
-                        videoGrid.classList.add('screen-active');
+                        screenShareView.classList.remove('hidden'); screenShareView.classList.add('flex-1');
+                        videoGrid.classList.remove('flex-1'); videoGrid.classList.add('screen-active');
                     };
                     spc.onicecandidate = ev => { if (ev.candidate) sendSignalData({ type: 'screen-ice', candidate: ev.candidate }, rId); };
                     await spc.setRemoteDescription(new RTCSessionDescription(data.offer));
-                    const sAnswer = await spc.createAnswer();
-                    await spc.setLocalDescription(sAnswer);
+                    const sAnswer = await spc.createAnswer(); await spc.setLocalDescription(sAnswer);
                     sendSignalData({ type: 'screen-answer', answer: sAnswer }, rId);
                     break;
                 case 'screen-answer':
@@ -332,39 +356,23 @@
             if (peerConnections[remoteId]) return;
             const pc = new RTCPeerConnection(rtcConfig);
             peerConnections[remoteId] = pc;
-
             pc.addTrack(localStream.getVideoTracks()[0], localStream);
             pc.addTrack(localStream.getAudioTracks()[0], localStream);
-
             pc.onicecandidate = ev => { if (ev.candidate) sendSignalData({ type: 'ice', candidate: ev.candidate }, remoteId); };
-            pc.ontrack = ev => {
-                if (ev.track.kind === 'video') createVideoCard(remoteId, remoteName, ev.streams[0]);
-            };
-
+            pc.ontrack = ev => { if (ev.track.kind === 'video') createVideoCard(remoteId, remoteName, ev.streams[0]); };
             if (isInitiator) {
-                const offer = await pc.createOffer();
-                await pc.setLocalDescription(offer);
+                const offer = await pc.createOffer(); await pc.setLocalDescription(offer);
                 sendSignalData({ type: 'offer', offer: offer, senderName: userName }, remoteId);
-                
-                // Eğer ekran paylaşıyorsak, odaya yeni giren kişiye ekran kanalını da gönder
-                if (isScreenSharing) {
-                    setTimeout(() => buildScreenLink(remoteId), 1000); // Kamera bağlandıktan 1 sn sonra ekranı yolla
-                }
+                if (isScreenSharing) { setTimeout(() => buildScreenLink(remoteId), 1000); }
             }
         }
 
-        // --- EKRAN PAYLAŞIMI BAĞLANTISI (DUAL-CHANNEL) ---
         async function buildScreenLink(remoteId) {
             if(!screenStream) return;
-            const pc = new RTCPeerConnection(rtcConfig);
-            screenPCs[remoteId] = pc;
-            
+            const pc = new RTCPeerConnection(rtcConfig); screenPCs[remoteId] = pc;
             pc.addTrack(screenStream.getVideoTracks()[0], screenStream);
-            
             pc.onicecandidate = ev => { if (ev.candidate) sendSignalData({ type: 'screen-ice', candidate: ev.candidate }, remoteId); };
-            
-            const offer = await pc.createOffer();
-            await pc.setLocalDescription(offer);
+            const offer = await pc.createOffer(); await pc.setLocalDescription(offer);
             sendSignalData({ type: 'screen-offer', offer: offer, senderName: userName }, remoteId);
         }
 
@@ -372,12 +380,9 @@
 
         function createVideoCard(id, rName, stream) {
             if (document.getElementById(`wrapper_${id}`)) return;
-            const wrapper = document.createElement('div');
-            wrapper.className = 'video-wrapper';
-            wrapper.id = `wrapper_${id}`;
+            const wrapper = document.createElement('div'); wrapper.className = 'video-wrapper'; wrapper.id = `wrapper_${id}`;
             wrapper.innerHTML = `<video id="video_${id}_cam" autoplay playsinline></video><div class="user-tag"><i class="fa-solid fa-microphone text-emerald-400 mr-2"></i> <span>${rName}</span></div>`;
-            videoGrid.appendChild(wrapper);
-            document.getElementById(`video_${id}_cam`).srcObject = stream;
+            videoGrid.appendChild(wrapper); document.getElementById(`video_${id}_cam`).srcObject = stream;
         }
 
         function removeUserConnection(id) {
@@ -386,86 +391,49 @@
             if (screenPCs[id]) { screenPCs[id].close(); delete screenPCs[id]; }
         }
 
-        // ==========================================
-        // EKRAN PAYLAŞIMI MOTORU (YENİ SİSTEM)
-        // ==========================================
         document.getElementById('share-screen').onclick = async () => {
             const btn = document.getElementById('share-screen');
             try {
                 if (!isScreenSharing) {
                     screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
-                    const screenTrack = screenStream.getVideoTracks()[0];
-
-                    isScreenSharing = true;
-
-                    // Tüm mevcut kişilere 2. kanal olarak ekranı yolla
+                    const screenTrack = screenStream.getVideoTracks()[0]; isScreenSharing = true;
                     Object.keys(peerConnections).forEach(id => buildScreenLink(id));
-
-                    // Lokal UI Güncellemesi
-                    screenVideo.srcObject = screenStream;
-                    document.getElementById('screen-owner-name').innerText = "Sizin Ekranınız";
-                    
-                    screenShareView.classList.remove('hidden');
-                    screenShareView.classList.add('flex-1');
-                    videoGrid.classList.remove('flex-1');
-                    videoGrid.classList.add('screen-active'); // Kameraları alta şerit olarak indir
-
-                    btn.classList.replace('bg-slate-800', 'bg-sky-500');
-                    btn.classList.replace('text-sky-400', 'text-white');
-
+                    screenVideo.srcObject = screenStream; document.getElementById('screen-owner-name').innerText = "Sizin Ekranınız";
+                    screenShareView.classList.remove('hidden'); screenShareView.classList.add('flex-1');
+                    videoGrid.classList.remove('flex-1'); videoGrid.classList.add('screen-active');
+                    btn.classList.replace('bg-slate-800', 'bg-sky-500'); btn.classList.replace('text-sky-400', 'text-white');
                     screenTrack.onended = () => stopScreenShare();
-                } else {
-                    stopScreenShare();
-                }
-            } catch (err) { console.error("Ekran paylaşımı hatası:", err); }
+                } else { stopScreenShare(); }
+            } catch (err) { console.error(err); }
         };
 
         function stopScreenShare() {
             if (screenStream) screenStream.getTracks().forEach(t => t.stop());
-            screenStream = null;
-            isScreenSharing = false;
-
-            // Ekran bağlantılarını temizle
-            Object.values(screenPCs).forEach(pc => pc.close());
-            screenPCs = {};
-            
-            // UI Eski haline dön
-            screenShareView.classList.add('hidden');
-            screenShareView.classList.remove('flex-1');
-            videoGrid.classList.remove('screen-active');
-            videoGrid.classList.add('flex-1');
-            
+            screenStream = null; isScreenSharing = false;
+            Object.values(screenPCs).forEach(pc => pc.close()); screenPCs = {};
+            screenShareView.classList.add('hidden'); screenShareView.classList.remove('flex-1');
+            videoGrid.classList.remove('screen-active'); videoGrid.classList.add('flex-1');
             const btn = document.getElementById('share-screen');
-            btn.classList.replace('bg-sky-500', 'bg-slate-800');
-            btn.classList.replace('text-white', 'text-sky-400');
-
+            btn.classList.replace('bg-sky-500', 'bg-slate-800'); btn.classList.replace('text-white', 'text-sky-400');
             if (p2pChannel) p2pChannel.send({ type: 'broadcast', event: 'screen-stop', payload: { userId: myClientId } });
         }
 
-        // ==========================================
-        // GELİŞMİŞ BEYAZ TAHTA MOTORU
-        // ==========================================
         function setupWhiteboardEngine() {
-            whiteboardCanvas.width = 1200;
-            whiteboardCanvas.height = 700;
-            boardCtx.lineCap = 'round';
-            boardCtx.lineJoin = 'round';
+            whiteboardCanvas.width = 1200; whiteboardCanvas.height = 700;
+            boardCtx.lineCap = 'round'; boardCtx.lineJoin = 'round';
 
             document.querySelectorAll('.wb-tool').forEach(btn => {
                 btn.onclick = () => {
                     document.querySelectorAll('.wb-tool').forEach(b => b.classList.remove('active'));
-                    btn.classList.add('active');
-                    currentTool = btn.dataset.tool;
-                    if(currentTool === 'eraser') whiteboardCanvas.style.cursor = 'cell';
-                    else whiteboardCanvas.style.cursor = 'crosshair';
+                    btn.classList.add('active'); currentTool = btn.dataset.tool;
+                    whiteboardCanvas.style.cursor = currentTool === 'eraser' ? 'cell' : 'crosshair';
                 }
             });
 
             document.querySelectorAll('.wb-color').forEach(btn => {
                 btn.onclick = () => {
                     document.querySelectorAll('.wb-color').forEach(b => b.classList.remove('active'));
-                    btn.classList.add('active');
-                    currentColor = btn.dataset.color;
+                    btn.classList.add('active'); currentColor = btn.dataset.color;
                 }
             });
 
@@ -476,34 +444,26 @@
             };
 
             whiteboardCanvas.addEventListener('mousedown', (e) => {
-                isDrawing = true;
-                const coords = getCanvasCoordinates(e);
+                isDrawing = true; const coords = getCanvasCoordinates(e);
                 startX = coords[0]; startY = coords[1];
                 wbSnapshot = boardCtx.getImageData(0, 0, whiteboardCanvas.width, whiteboardCanvas.height);
             });
 
             whiteboardCanvas.addEventListener('mousemove', (e) => {
-                if (!isDrawing) return;
-                const [curX, curY] = getCanvasCoordinates(e);
-
+                if (!isDrawing) return; const [curX, curY] = getCanvasCoordinates(e);
                 if (currentTool === 'pen' || currentTool === 'eraser') {
                     drawShape(currentTool, startX, startY, curX, curY, currentColor);
                     if (p2pChannel) p2pChannel.send({ type: 'broadcast', event: 'draw', payload: { type: currentTool, x1: startX, y1: startY, x2: curX, y2: curY, color: currentColor } });
                     startX = curX; startY = curY;
                 } else {
-                    boardCtx.putImageData(wbSnapshot, 0, 0);
-                    drawShape(currentTool, startX, startY, curX, curY, currentColor);
+                    boardCtx.putImageData(wbSnapshot, 0, 0); drawShape(currentTool, startX, startY, curX, curY, currentColor);
                 }
             });
 
             whiteboardCanvas.addEventListener('mouseup', (e) => {
-                if (!isDrawing) return;
-                isDrawing = false;
-                const [curX, curY] = getCanvasCoordinates(e);
-
+                if (!isDrawing) return; isDrawing = false; const [curX, curY] = getCanvasCoordinates(e);
                 if (currentTool !== 'pen' && currentTool !== 'eraser') {
-                    boardCtx.putImageData(wbSnapshot, 0, 0);
-                    drawShape(currentTool, startX, startY, curX, curY, currentColor);
+                    boardCtx.putImageData(wbSnapshot, 0, 0); drawShape(currentTool, startX, startY, curX, curY, currentColor);
                     if (p2pChannel) p2pChannel.send({ type: 'broadcast', event: 'draw', payload: { type: currentTool, x1: startX, y1: startY, x2: curX, y2: curY, color: currentColor } });
                 }
             });
@@ -515,31 +475,22 @@
             return [ ((e.clientX - rect.left) / rect.width) * whiteboardCanvas.width, ((e.clientY - rect.top) / rect.height) * whiteboardCanvas.height ];
         }
 
-        function drawShape(type, x1, y1, x2, y2, color) {
-            boardCtx.beginPath();
-            boardCtx.strokeStyle = type === 'eraser' ? '#ffffff' : color;
-            boardCtx.lineWidth = type === 'eraser' ? 20 : 3;
+        document.getElementById('clear-board-btn').onclick = () => {
+            clearBoardLocal(); if (p2pChannel) p2pChannel.send({ type: 'broadcast', event: 'clear-board' });
+        };
+        function clearBoardLocal() { boardCtx.clearRect(0, 0, whiteboardCanvas.width, whiteboardCanvas.height); }
 
-            if (type === 'pen' || type === 'eraser' || type === 'line') {
-                boardCtx.moveTo(x1, y1); boardCtx.lineTo(x2, y2);
-            } else if (type === 'rect') {
-                boardCtx.rect(x1, y1, x2 - x1, y2 - y1);
-            } else if (type === 'circle') {
-                const radius = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
-                boardCtx.arc(x1, y1, radius, 0, 2 * Math.PI);
-            }
+        function drawShape(type, x1, y1, x2, y2, color) {
+            boardCtx.beginPath(); boardCtx.strokeStyle = type === 'eraser' ? '#ffffff' : color;
+            boardCtx.lineWidth = type === 'eraser' ? 20 : 3;
+            if (type === 'pen' || type === 'eraser' || type === 'line') { boardCtx.moveTo(x1, y1); boardCtx.lineTo(x2, y2); }
+            else if (type === 'rect') { boardCtx.rect(x1, y1, x2 - x1, y2 - y1); }
+            else if (type === 'circle') { const radius = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2)); boardCtx.arc(x1, y1, radius, 0, 2 * Math.PI); }
             boardCtx.stroke();
         }
 
         function remoteDrawAction(data) { drawShape(data.type, data.x1, data.y1, data.x2, data.y2, data.color); }
 
-        document.getElementById('clear-board-btn').onclick = () => {
-            clearBoardLocal();
-            if (p2pChannel) p2pChannel.send({ type: 'broadcast', event: 'clear-board' });
-        };
-        function clearBoardLocal() { boardCtx.clearRect(0, 0, whiteboardCanvas.width, whiteboardCanvas.height); }
-
-        // UI VE MEDYA KONTROLLERİ
         const gridBtn = document.getElementById('view-grid-btn');
         const boardBtn = document.getElementById('view-board-btn');
         const boardContainer = document.getElementById('whiteboard-container');
@@ -549,7 +500,6 @@
             boardBtn.className = "text-slate-400 hover:text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all";
             boardContainer.classList.add('hidden');
         };
-
         boardBtn.onclick = () => {
             boardBtn.className = "bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all";
             gridBtn.className = "text-slate-400 hover:text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all";
@@ -567,56 +517,44 @@
         chatInput.onkeypress = (e) => { if (e.key === 'Enter') sendChatMessage(); };
 
         function sendChatMessage() {
-            const msg = chatInput.value.trim();
-            if (!msg) return;
-            renderChatMessage("Siz", msg);
+            const msg = chatInput.value.trim(); if (!msg) return; renderChatMessage("Siz", msg);
             if (p2pChannel) p2pChannel.send({ type: 'broadcast', event: 'chat', payload: { sender: userName, text: msg } });
             chatInput.value = "";
         }
         function renderChatMessage(sender, text) {
-            const div = document.createElement('div');
-            div.className = "bg-slate-950 p-2.5 rounded-xl border border-slate-800/40";
+            const div = document.createElement('div'); div.className = "bg-slate-950 p-2.5 rounded-xl border border-slate-800/40";
             div.innerHTML = `<span class="block text-[11px] font-bold text-emerald-400 mb-0.5">${sender}</span><p class="text-slate-200 font-medium">${text}</p>`;
-            chatMessages.appendChild(div);
-            chatMessages.scrollTop = chatMessages.scrollHeight;
+            chatMessages.appendChild(div); chatMessages.scrollTop = chatMessages.scrollHeight;
         }
 
         function sendReaction(emoji) {
             showEmojiAnimation(emoji);
             if(p2pChannel) p2pChannel.send({ type: 'broadcast', event: 'emoji', payload: { emoji: emoji } });
         }
+        
+        /* GÜNCELLENEN: setTimeout ile CSS Animasyonu senkronize edildi */
         function showEmojiAnimation(emoji) {
             const div = document.createElement('div');
             div.className = 'neon-emoji'; div.innerText = emoji;
-            div.style.left = Math.random() * 65 + 15 + 'vw';
+            div.style.left = Math.random() * 70 + 15 + 'vw';
             document.body.appendChild(div);
-            setTimeout(() => div.remove(), 2500);
+            setTimeout(() => div.remove(), 3100); // 3.0 saniyelik animasyon bitene kadar beklenir
         }
 
-        // MİKROFON KONTROLÜ (GELİŞMİŞ SENKRONİZASYON)
         document.getElementById('toggle-mic').onclick = () => {
             const track = localStream.getAudioTracks()[0];
             if(track) {
-                track.enabled = !track.enabled;
-                const isMuted = !track.enabled;
-                
-                // Lokal İkonu Güncelle
+                track.enabled = !track.enabled; const isMuted = !track.enabled;
                 document.getElementById('local-mic-icon').className = isMuted ? "fa-solid fa-microphone-slash text-red-500 mr-2" : "fa-solid fa-microphone text-emerald-400 mr-2";
                 document.getElementById('toggle-mic').innerHTML = isMuted ? `<i class="fa-solid fa-microphone-slash text-red-500"></i>` : `<i class="fa-solid fa-microphone"></i>`;
-                
-                // Ağdaki Diğer Kullanıcılara "Sesi Kapattım" Sinyali Gönder
-                if (p2pChannel) {
-                    p2pChannel.send({ type: 'broadcast', event: 'mic-toggle', payload: { userId: myClientId, isMuted: isMuted } });
-                }
+                if (p2pChannel) p2pChannel.send({ type: 'broadcast', event: 'mic-toggle', payload: { userId: myClientId, isMuted: isMuted } });
             }
         };
 
-        // KAMERA KONTROLÜ
         document.getElementById('toggle-cam').onclick = () => {
             const track = localStream.getVideoTracks()[0];
             if(track) {
-                track.enabled = !track.enabled;
-                localVideo.style.opacity = track.enabled ? "1" : "0";
+                track.enabled = !track.enabled; localVideo.style.opacity = track.enabled ? "1" : "0";
                 document.getElementById('toggle-cam').innerHTML = track.enabled ? `<i class="fa-solid fa-video"></i>` : `<i class="fa-solid fa-video-slash text-red-500"></i>`;
             }
         };
@@ -625,10 +563,7 @@
 
         function startTimer() {
             let elapsed = 0;
-            setInterval(() => {
-                elapsed++;
-                document.getElementById('meeting-timer').innerText = `${String(Math.floor(elapsed / 60)).padStart(2, '0')}:${String(elapsed % 60).padStart(2, '0')}`;
-            }, 1000);
+            setInterval(() => { elapsed++; document.getElementById('meeting-timer').innerText = `${String(Math.floor(elapsed / 60)).padStart(2, '0')}:${String(elapsed % 60).padStart(2, '0')}`; }, 1000);
         }
     </script>
 </body>
