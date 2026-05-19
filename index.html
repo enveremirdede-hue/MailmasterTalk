@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MailmasterTalk Mega Pro - v5.6</title>
+    <title>MailmasterTalk Mega Pro - v5.7</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -43,31 +43,31 @@
         .filter-sepia { filter: sepia(85%) saturate(1.2); }
         .filter-none { filter: none; }
 
-        /* KESİN ÇÖZÜM: SENKRONİZE EDİLMİŞ EMOJI ANİMASYONU */
+        /* GÜNCELLENEN: DUVARA VEYA TAVANA ÇARPMAYAN HAVADA ERİYEN EMOJI SİSTEMİ */
         @keyframes emojiAnimation {
             0% { 
                 transform: translateY(0) scale(0.6) rotate(0deg); 
                 opacity: 0; 
             }
-            10% { 
+            15% { 
                 opacity: 1; 
             }
-            75% { 
-                opacity: 1; /* %75'e kadar net görünür */
+            65% { 
+                opacity: 1; 
             }
-            100% { 
-                /* Kenarlardan kesilmemesi için scale 1.5, tavanda kalması için -90vh */
-                transform: translateY(-90vh) scale(1.5) rotate(20deg); 
+            90%, 100% { 
+                /* Üst navigasyon barına ve tavana çarpmaması için yükseklik -65vh yapıldı ve erken eritildi */
+                transform: translateY(-65vh) scale(1.4) rotate(15deg); 
                 opacity: 0; 
             }
         }
         .neon-emoji { 
             position: fixed; 
-            bottom: 100px; 
+            bottom: 120px; /* Alt barın üstünden başlar */
             font-size: 4.5rem; 
             pointer-events: none; 
             z-index: 999999; 
-            animation: emojiAnimation 3.0s ease-out forwards; /* Tam 3 saniye sürer */
+            animation: emojiAnimation 3.0s ease-out forwards;
             filter: drop-shadow(0 0 15px #00ffcc) drop-shadow(0 0 30px #ff00ff); 
         }
 
@@ -223,15 +223,12 @@
 
         let isDrawing = false; let currentTool = 'pen'; let currentColor = '#1e293b'; let startX = 0, startY = 0; let wbSnapshot = null;
 
+        // GÜNCELLENEN: URL Parametresi Yakalama (GitHub Pages Dostu)
         window.addEventListener('DOMContentLoaded', async () => {
-            if (window.location.protocol.startsWith('http')) {
-                const cleanPath = window.location.pathname.replace('/index.html', '');
-                const pathParts = cleanPath.split('/').filter(Boolean);
-                
-                if (pathParts.length > 0) {
-                    const roomParam = decodeURIComponent(pathParts[0]);
-                    document.getElementById('room-input').value = roomParam;
-                }
+            const urlParams = new URLSearchParams(window.location.search);
+            const roomParam = urlParams.get('room');
+            if (roomParam) {
+                document.getElementById('room-input').value = decodeURIComponent(roomParam);
             }
 
             try {
@@ -256,9 +253,11 @@
             initSupabaseMeshNetwork(rId);
         };
 
+        // GÜNCELLENEN: GitHub Pages Alt Klasörünü Koruyan Davetiye Linki Üretici (?room=odaKodu)
         document.getElementById('copy-room-link-btn').onclick = async () => {
             if (!currentRoomId) return;
-            const inviteUrl = `${window.location.origin}/${encodeURIComponent(currentRoomId)}`;
+            const baseUrl = window.location.origin + window.location.pathname.split('?')[0].split('#')[0];
+            const inviteUrl = `${baseUrl}?room=${encodeURIComponent(currentRoomId)}`;
             try {
                 await navigator.clipboard.writeText(inviteUrl);
                 const icon = document.querySelector('#copy-room-link-btn i');
@@ -532,13 +531,14 @@
             if(p2pChannel) p2pChannel.send({ type: 'broadcast', event: 'emoji', payload: { emoji: emoji } });
         }
         
-        /* GÜNCELLENEN: setTimeout ile CSS Animasyonu senkronize edildi */
+        // GÜNCELLENEN: Emojileri güvenli orta alanda tutan ve tavandan önce eriten animasyon tetikleyici
         function showEmojiAnimation(emoji) {
             const div = document.createElement('div');
             div.className = 'neon-emoji'; div.innerText = emoji;
-            div.style.left = Math.random() * 70 + 15 + 'vw';
+            // Sağ veya soldaki panellere çarpmaması için yatayda %20 ile %75 ekran genişliği arasına sınırlandırdık
+            div.style.left = Math.random() * 55 + 20 + 'vw';
             document.body.appendChild(div);
-            setTimeout(() => div.remove(), 3100); // 3.0 saniyelik animasyon bitene kadar beklenir
+            setTimeout(() => div.remove(), 3100);
         }
 
         document.getElementById('toggle-mic').onclick = () => {
