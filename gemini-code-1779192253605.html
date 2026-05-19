@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MailmasterTalk Mega Pro - v4</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: 'Inter', sans-serif; overflow: hidden; }
+        
+        /* Normal Galeri Düzeni */
+        .video-matrix { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; width: 100%; height: 100%; align-content: start; transition: all 0.3s; }
+        
+        /* Ekran Paylaşımı Aktifken Kamera Şeridi Düzeni (YATAY) */
+        .video-matrix.screen-active {
+            display: flex;
+            flex-direction: row;
+            flex-wrap: nowrap;
+            height: 160px;
+            min-height: 160px;
+            overflow-x: auto;
+            overflow-y: hidden;
+            align-items: center;
+            padding-bottom: 0.5rem;
+        }
+        .video-matrix.screen-active .video-wrapper {
+            width: 220px;
+            height: 100%;
+            flex-shrink: 0;
+            aspect-ratio: auto;
+        }
+
+        .video-wrapper { position: relative; background: #0f172a; border-radius: 0.75rem; overflow: hidden; border: 2px solid #1e293b; aspect-ratio: 16/9; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3); transition: all 0.3s ease; }
+        video { width: 100%; height: 100%; object-fit: cover; transition: filter 0.3s ease; }
+        .local-mirror { transform: scaleX(-1); }
+        
+        .user-tag { position: absolute; bottom: 8px; left: 8px; background: rgba(15, 23, 42, 0.75); color: #f8fafc; padding: 4px 8px; border-radius: 0.5rem; font-size: 0.7rem; font-weight: 600; backdrop-filter: blur(4px); border: 1px solid rgba(255,255,255,0.05); z-index: 10; display: flex; align-items: center; }
+
+        .filter-noir { filter: grayscale(100%) contrast(1.3); }
+        .filter-cyber { filter: hue-rotate(85deg) saturate(2.5) contrast(1.1); }
+        .filter-sepia { filter: sepia(85%) saturate(1.2); }
+        .filter-none { filter: none; }
+
+        @keyframes emojiUp {
+            0% { transform: translateY(0) scale(0.6); opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { transform: translateY(-75vh) scale(2.2) rotate(15deg); opacity: 0; }
+        }
+        .neon-emoji { position: fixed; bottom: 100px; font-size: 4rem; pointer-events: none; animation: emojiUp 2.5s cubic-bezier(0.1, 0.8, 0.3, 1) forwards; z-index: 99999; filter: drop-shadow(0 0 15px #00ffcc) drop-shadow(0 0 30px #ff00ff); }
+
+        .wb-tool { padding: 4px 8px; border-radius: 0.375rem; color: #94a3b8; transition: all 0.2s; }
+        .wb-tool:hover { color: #f8fafc; background: rgba(255,255,255,0.1); }
+        .wb-tool.active { background: #10b981; color: white; box-shadow: 0 0 10px rgba(16, 185, 129, 0.5); }
+        .wb-color { cursor: pointer; transition: transform 0.2s; }
+        .wb-color:hover { transform: scale(1.2); }
+        .wb-color.active { border-color: white !important; transform: scale(1.1); box-shadow: 0 0 8px rgba(255,255,255,0.8); }
+        
+        /* Ekran paylaşımındaki videonun taşmaması için */
+        #screenVideo { object-fit: contain; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 h-screen flex flex-col justify-between select-none">
+
+    <div id="lobby-screen" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950 px-4">
+        <div class="bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-2xl max-w-md w-full border-t-4 border-t-emerald-500">
+            <h1 class="text-3xl font-black text-center bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent mb-1">MailmasterTalk</h1>
+            <p class="text-center text-slate-400 text-xs mb-6 tracking-widest font-semibold uppercase">Mega Workspace Network</p>
+            <div class="space-y-4">
+                <div>
+                    <label class="text-xs font-bold text-slate-400 uppercase">Adınız</label>
+                    <input id="username-input" type="text" placeholder="Örn: Emir" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 mt-1 focus:border-emerald-500 text-white outline-none">
+                </div>
+                <div>
+                    <label class="text-xs font-bold text-slate-400 uppercase">Toplantı Oda Kodu</label>
+                    <input id="room-input" type="text" placeholder="Örn: master-oda" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 mt-1 focus:border-emerald-500 text-white font-mono">
+                </div>
+                <button id="join-btn" class="w-full bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 text-white font-bold py-3.5 rounded-xl shadow-lg transition transform active:scale-95">Toplantıya Katıl</button>
+            </div>
+        </div>
+    </div>
+
+    <header class="bg-slate-900/60 border-b border-slate-800/80 p-4 flex justify-between items-center px-6 backdrop-blur-md z-10">
+        <div class="flex items-center gap-3">
+            <span class="font-black text-xl tracking-tight">Mailmaster<span class="text-emerald-400">Talk</span></span>
+            <span class="bg-emerald-500/10 text-[11px] px-3 py-1 rounded-full text-emerald-400 border border-emerald-500/20 font-bold font-mono">ODA: <span id="current-room-text">...</span></span>
+        </div>
+        <div class="flex items-center gap-4">
+            <div class="bg-slate-950 border border-slate-800 p-1 rounded-xl flex gap-1">
+                <button id="view-grid-btn" class="bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all"><i class="fa-solid fa-table-cells-large mr-1"></i> Galeri</button>
+                <button id="view-board-btn" class="text-slate-400 hover:text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all"><i class="fa-solid fa-chalkboard mr-1"></i> Beyaz Tahta</button>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 text-slate-300 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-2">
+                <i class="fa-regular fa-clock text-emerald-400"></i> <span id="meeting-timer">00:00</span>
+            </div>
+        </div>
+    </header>
+
+    <div class="flex-1 flex overflow-hidden relative p-4 gap-4">
+        
+        <div class="flex-1 flex flex-col relative h-full">
+            
+            <div id="screen-share-view" class="hidden w-full bg-slate-950 rounded-xl border-2 border-sky-500/50 overflow-hidden mb-4 relative shadow-[0_0_20px_rgba(14,165,233,0.3)]">
+                <video id="screenVideo" autoplay playsinline class="w-full h-full"></video>
+                <div class="user-tag"><i class="fa-solid fa-desktop text-sky-400 mr-2"></i> <span id="screen-owner-name">Ekran Paylaşımı</span></div>
+            </div>
+
+            <div id="video-grid" class="video-matrix flex-1">
+                <div class="video-wrapper" id="local-video-wrapper">
+                    <video id="localVideo" autoplay muted playsinline class="local-mirror filter-none"></video>
+                    <div class="user-tag"><i id="local-mic-icon" class="fa-solid fa-microphone text-emerald-400 mr-2"></i> <span id="local-name-tag">Siz</span></div>
+                </div>
+            </div>
+
+            <div id="whiteboard-container" class="hidden absolute inset-0 bg-slate-900 rounded-xl border border-slate-800 flex flex-col overflow-hidden z-20">
+                <div class="bg-slate-950 p-2 border-b border-slate-800 flex justify-between items-center px-4 flex-wrap gap-2">
+                    <div class="flex items-center gap-2 bg-slate-900 border border-slate-800 p-1 rounded-lg">
+                        <button class="wb-tool active" data-tool="pen" title="Kalem"><i class="fa-solid fa-pen"></i></button>
+                        <button class="wb-tool" data-tool="eraser" title="Silgi"><i class="fa-solid fa-eraser"></i></button>
+                        <button class="wb-tool" data-tool="rect" title="Dikdörtgen"><i class="fa-regular fa-square"></i></button>
+                        <button class="wb-tool" data-tool="circle" title="Çember"><i class="fa-regular fa-circle"></i></button>
+                        <button class="wb-tool" data-tool="line" title="Düz Çizgi"><i class="fa-solid fa-minus"></i></button>
+                        
+                        <div class="w-px h-5 bg-slate-700 mx-2"></div>
+                        
+                        <div class="flex items-center gap-2">
+                            <button class="wb-color w-5 h-5 rounded-full bg-[#1e293b] border-2 border-slate-500 active" data-color="#1e293b"></button>
+                            <button class="wb-color w-5 h-5 rounded-full bg-[#ef4444] border-2 border-transparent" data-color="#ef4444"></button>
+                            <button class="wb-color w-5 h-5 rounded-full bg-[#3b82f6] border-2 border-transparent" data-color="#3b82f6"></button>
+                            <button class="wb-color w-5 h-5 rounded-full bg-[#10b981] border-2 border-transparent" data-color="#10b981"></button>
+                            <div class="relative w-6 h-6 rounded overflow-hidden border-2 border-transparent ml-1 outline outline-1 outline-slate-700">
+                                <input type="color" id="custom-color-picker" class="absolute -top-2 -left-2 w-10 h-10 cursor-pointer" value="#a855f7">
+                            </div>
+                        </div>
+                    </div>
+                    <button id="clear-board-btn" class="bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white border border-red-500/20 px-3 py-1.5 rounded-lg text-xs font-bold transition-all"><i class="fa-solid fa-trash mr-1"></i> Tahtayı Temizle</button>
+                </div>
+                <canvas id="whiteboard" class="flex-1 bg-white cursor-crosshair"></canvas>
+            </div>
+        </div>
+
+        <div id="chat-panel" class="w-80 bg-slate-900 border border-slate-800 rounded-xl flex flex-col overflow-hidden shadow-2xl transition-all duration-300">
+            <div class="bg-slate-950 p-3 border-b border-slate-800 font-bold text-xs tracking-wider text-slate-400 flex items-center justify-between">
+                <span><i class="fa-regular fa-comments text-emerald-400 mr-1.5"></i> CANLI SOHBET</span>
+                <span class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+            </div>
+            <div id="chat-messages" class="flex-1 p-4 overflow-y-auto space-y-3 text-sm"></div>
+            <div class="p-3 bg-slate-950 border-t border-slate-800 flex gap-2">
+                <input id="chat-input" type="text" placeholder="Mesajınızı yazın..." class="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-emerald-500 font-medium">
+                <button id="send-chat-btn" class="bg-emerald-500 hover:bg-emerald-400 text-white w-9 h-9 rounded-xl flex items-center justify-center transition-all"><i class="fa-solid fa-paper-plane text-xs"></i></button>
+            </div>
+        </div>
+    </div>
+
+    <footer class="bg-slate-900/80 border-t border-slate-800/60 p-4 flex justify-between items-center px-6 gap-4 backdrop-blur-md z-10">
+        <div class="flex items-center gap-2">
+            <select id="video-filter-select" class="bg-slate-950 border border-slate-800 text-xs text-slate-300 px-3 py-2.5 rounded-xl focus:border-emerald-500 outline-none font-semibold cursor-pointer">
+                <option value="none">Filtre Yok (Normal)</option>
+                <option value="noir">Sinematik Siyah-Beyaz</option>
+                <option value="cyber">Cyberpunk Neon</option>
+                <option value="sepia">Nostaljik Sepya</option>
+            </select>
+        </div>
+        <div class="flex items-center gap-3">
+            <button id="toggle-mic" class="bg-slate-800 hover:bg-slate-700 text-slate-200 w-12 h-12 rounded-xl flex items-center justify-center text-lg border border-slate-700 shadow-md"><i class="fa-solid fa-microphone"></i></button>
+            <button id="toggle-cam" class="bg-slate-800 hover:bg-slate-700 text-slate-200 w-12 h-12 rounded-xl flex items-center justify-center text-lg border border-slate-700 shadow-md"><i class="fa-solid fa-video"></i></button>
+            <button id="share-screen" class="bg-slate-800 hover:bg-slate-700 w-12 h-12 rounded-xl flex items-center justify-center text-lg border border-slate-700 text-sky-400 shadow-md transition-all"><i class="fa-solid fa-desktop"></i></button>
+            
+            <div class="bg-slate-950 border border-slate-800 px-4 py-2 rounded-xl flex items-center gap-3.5 shadow-inner">
+                <button onclick="sendReaction('✨')" class="hover:scale-125 transition text-2xl">✨</button>
+                <button onclick="sendReaction('🔥')" class="hover:scale-125 transition text-2xl">🔥</button>
+                <button onclick="sendReaction('👏')" class="hover:scale-125 transition text-2xl">👏</button>
+                <button onclick="sendReaction('💡')" class="hover:scale-125 transition text-2xl">💡</button>
+            </div>
+            <button id="hangup-btn" class="bg-red-600 hover:bg-red-500 text-white w-12 h-12 rounded-xl flex items-center justify-center text-lg border border-red-500 shadow-lg ml-2"><i class="fa-solid fa-phone-slash"></i></button>
+        </div>
+        <div class="w-20 hidden md:block"></div>
+    </footer>
+
+    <script>
+        const SUPABASE_URL = "https://atupjeqlzpuqzjpxkjri.supabase.co"; 
+        const SUPABASE_ANON_KEY = "sb_publishable_AIwx6jSgROBXJeaAs-zzQw_Oo1Zz9Vd"; 
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        
+        const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+        const myClientId = Math.random().toString(36).substring(2, 15);
+
+        const videoGrid = document.getElementById('video-grid');
+        const localVideo = document.getElementById('localVideo');
+        const screenVideo = document.getElementById('screenVideo');
+        const screenShareView = document.getElementById('screen-share-view');
+        const whiteboardCanvas = document.getElementById('whiteboard');
+        const boardCtx = whiteboardCanvas.getContext('2d', { willReadFrequently: true });
+        
+        let localStream, screenStream, p2pChannel;
+        let peerConnections = {}; 
+        let screenPCs = {}; // EKRAN PAYLAŞIMI İÇİN YENİ PARALEL AĞ
+        let iceQueues = {};        
+        let userName = "Anonim";
+        let isScreenSharing = false;
+
+        // BEYAZ TAHTA DEĞİŞKENLERİ
+        let isDrawing = false; let currentTool = 'pen'; let currentColor = '#1e293b'; let startX = 0, startY = 0; let wbSnapshot = null;
+
+        // DONANIM KURULUMU
+        window.addEventListener('DOMContentLoaded', async () => {
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                localVideo.srcObject = localStream;
+                setupWhiteboardEngine();
+            } catch (e) { alert("Donanım erişim izni reddedildi!"); }
+        });
+
+        document.getElementById('join-btn').onclick = () => {
+            const rId = document.getElementById('room-input').value.trim();
+            const uName = document.getElementById('username-input').value.trim();
+            if(!rId || !uName) return alert("Bilgileri doldurun.");
+            
+            userName = uName;
+            document.getElementById('local-name-tag').innerText = userName + " (Siz)";
+            document.getElementById('current-room-text').innerText = rId;
+            document.getElementById('lobby-screen').classList.add('hidden');
+            
+            startTimer();
+            initSupabaseMeshNetwork(rId);
+        };
+
+        function initSupabaseMeshNetwork(roomCode) {
+            p2pChannel = supabaseClient.channel(`mailmaster_mega_${roomCode}`, {
+                config: { presence: { key: myClientId } }
+            });
+
+            p2pChannel
+                .on('presence', { event: 'sync' }, () => handlePresenceSync(p2pChannel.presenceState()))
+                .on('broadcast', { event: 'signal' }, ({ payload }) => { if (payload.targetId === myClientId) handleInboundSignal(payload); })
+                .on('broadcast', { event: 'emoji' }, ({ payload }) => showEmojiAnimation(payload.emoji))
+                .on('broadcast', { event: 'chat' }, ({ payload }) => renderChatMessage(payload.sender, payload.text))
+                .on('broadcast', { event: 'draw' }, ({ payload }) => remoteDrawAction(payload))
+                .on('broadcast', { event: 'clear-board' }, () => clearBoardLocal())
+                .on('broadcast', { event: 'filter-broadcast' }, ({ payload }) => {
+                    const targetVideo = document.getElementById(`video_${payload.userId}_cam`);
+                    if (targetVideo) targetVideo.className = `filter-${payload.filter}`;
+                })
+                .on('broadcast', { event: 'mic-toggle' }, ({ payload }) => {
+                    // KARŞI TARAFTAN GELEN MİKROFON DURUMU GÜNCELLEMESİ
+                    const wrapper = document.getElementById(`wrapper_${payload.userId}`);
+                    if (wrapper) {
+                        const icon = wrapper.querySelector('.fa-microphone, .fa-microphone-slash');
+                        if (icon) {
+                            icon.className = payload.isMuted ? "fa-solid fa-microphone-slash text-red-500 mr-2" : "fa-solid fa-microphone text-emerald-400 mr-2";
+                        }
+                    }
+                })
+                .on('broadcast', { event: 'screen-stop' }, ({ payload }) => {
+                    // KARŞI TARAF EKRAN PAYLAŞIMINI DURDURDUĞUNDA
+                    if (screenPCs[payload.userId]) {
+                        screenPCs[payload.userId].close();
+                        delete screenPCs[payload.userId];
+                    }
+                    screenShareView.classList.add('hidden');
+                    screenShareView.classList.remove('flex-1');
+                    screenVideo.srcObject = null;
+                    videoGrid.classList.remove('screen-active');
+                    videoGrid.classList.add('flex-1');
+                })
+                .subscribe(async (status) => { if (status === 'SUBSCRIBED') await p2pChannel.track({ name: userName }); });
+        }
+
+        function handlePresenceSync(state) {
+            Object.keys(peerConnections).forEach(id => { if (!state[id]) removeUserConnection(id); });
+            Object.keys(state).forEach(id => {
+                if (id === myClientId) return;
+                if (myClientId > id && !peerConnections[id]) buildWebRTCLink(id, state[id][0].name, true);
+            });
+        }
+
+        async function handleInboundSignal(data) {
+            const rId = data.senderId;
+            switch (data.type) {
+                // Normal Kamera Sinyalleri
+                case 'offer':
+                    await buildWebRTCLink(rId, data.senderName, false);
+                    await peerConnections[rId].setRemoteDescription(new RTCSessionDescription(data.offer));
+                    if (iceQueues[rId]) while(iceQueues[rId].length > 0) await peerConnections[rId].addIceCandidate(iceQueues[rId].shift());
+                    const answer = await peerConnections[rId].createAnswer();
+                    await peerConnections[rId].setLocalDescription(answer);
+                    sendSignalData({ type: 'answer', answer: answer, senderName: userName }, rId);
+                    break;
+                case 'answer':
+                    if (peerConnections[rId]) {
+                        await peerConnections[rId].setRemoteDescription(new RTCSessionDescription(data.answer));
+                        if (iceQueues[rId]) while(iceQueues[rId].length > 0) await peerConnections[rId].addIceCandidate(iceQueues[rId].shift());
+                    }
+                    break;
+                case 'ice':
+                    if (peerConnections[rId] && peerConnections[rId].remoteDescription) await peerConnections[rId].addIceCandidate(new RTCIceCandidate(data.candidate));
+                    else { if (!iceQueues[rId]) iceQueues[rId] = []; iceQueues[rId].push(new RTCIceCandidate(data.candidate)); }
+                    break;
+                
+                // --- EKRAN PAYLAŞIMI ÖZEL PARALEL SİNYALLER ---
+                case 'screen-offer':
+                    const spc = new RTCPeerConnection(rtcConfig);
+                    screenPCs[rId] = spc;
+                    spc.ontrack = ev => {
+                        screenVideo.srcObject = ev.streams[0];
+                        document.getElementById('screen-owner-name').innerText = `${data.senderName} Kişisinin Ekranı`;
+                        
+                        // Ekran Paylaşımı Düzenini (Layout) Aktifleştir
+                        screenShareView.classList.remove('hidden');
+                        screenShareView.classList.add('flex-1');
+                        videoGrid.classList.remove('flex-1');
+                        videoGrid.classList.add('screen-active');
+                    };
+                    spc.onicecandidate = ev => { if (ev.candidate) sendSignalData({ type: 'screen-ice', candidate: ev.candidate }, rId); };
+                    await spc.setRemoteDescription(new RTCSessionDescription(data.offer));
+                    const sAnswer = await spc.createAnswer();
+                    await spc.setLocalDescription(sAnswer);
+                    sendSignalData({ type: 'screen-answer', answer: sAnswer }, rId);
+                    break;
+                case 'screen-answer':
+                    if(screenPCs[rId]) await screenPCs[rId].setRemoteDescription(new RTCSessionDescription(data.answer));
+                    break;
+                case 'screen-ice':
+                    if(screenPCs[rId] && screenPCs[rId].remoteDescription) await screenPCs[rId].addIceCandidate(new RTCIceCandidate(data.candidate));
+                    break;
+            }
+        }
+
+        async function buildWebRTCLink(remoteId, remoteName, isInitiator) {
+            if (peerConnections[remoteId]) return;
+            const pc = new RTCPeerConnection(rtcConfig);
+            peerConnections[remoteId] = pc;
+
+            pc.addTrack(localStream.getVideoTracks()[0], localStream);
+            pc.addTrack(localStream.getAudioTracks()[0], localStream);
+
+            pc.onicecandidate = ev => { if (ev.candidate) sendSignalData({ type: 'ice', candidate: ev.candidate }, remoteId); };
+            pc.ontrack = ev => {
+                if (ev.track.kind === 'video') createVideoCard(remoteId, remoteName, ev.streams[0]);
+            };
+
+            if (isInitiator) {
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+                sendSignalData({ type: 'offer', offer: offer, senderName: userName }, remoteId);
+                
+                // Eğer ekran paylaşıyorsak, odaya yeni giren kişiye ekran kanalını da gönder
+                if (isScreenSharing) {
+                    setTimeout(() => buildScreenLink(remoteId), 1000); // Kamera bağlandıktan 1 sn sonra ekranı yolla
+                }
+            }
+        }
+
+        // --- EKRAN PAYLAŞIMI BAĞLANTISI (DUAL-CHANNEL) ---
+        async function buildScreenLink(remoteId) {
+            if(!screenStream) return;
+            const pc = new RTCPeerConnection(rtcConfig);
+            screenPCs[remoteId] = pc;
+            
+            pc.addTrack(screenStream.getVideoTracks()[0], screenStream);
+            
+            pc.onicecandidate = ev => { if (ev.candidate) sendSignalData({ type: 'screen-ice', candidate: ev.candidate }, remoteId); };
+            
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            sendSignalData({ type: 'screen-offer', offer: offer, senderName: userName }, remoteId);
+        }
+
+        function sendSignalData(payload, targetId) { p2pChannel.send({ type: 'broadcast', event: 'signal', payload: { ...payload, senderId: myClientId, targetId: targetId } }); }
+
+        function createVideoCard(id, rName, stream) {
+            if (document.getElementById(`wrapper_${id}`)) return;
+            const wrapper = document.createElement('div');
+            wrapper.className = 'video-wrapper';
+            wrapper.id = `wrapper_${id}`;
+            wrapper.innerHTML = `<video id="video_${id}_cam" autoplay playsinline></video><div class="user-tag"><i class="fa-solid fa-microphone text-emerald-400 mr-2"></i> <span>${rName}</span></div>`;
+            videoGrid.appendChild(wrapper);
+            document.getElementById(`video_${id}_cam`).srcObject = stream;
+        }
+
+        function removeUserConnection(id) {
+            if (document.getElementById(`wrapper_${id}`)) document.getElementById(`wrapper_${id}`).remove();
+            if (peerConnections[id]) { peerConnections[id].close(); delete peerConnections[id]; }
+            if (screenPCs[id]) { screenPCs[id].close(); delete screenPCs[id]; }
+        }
+
+        // ==========================================
+        // EKRAN PAYLAŞIMI MOTORU (YENİ SİSTEM)
+        // ==========================================
+        document.getElementById('share-screen').onclick = async () => {
+            const btn = document.getElementById('share-screen');
+            try {
+                if (!isScreenSharing) {
+                    screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+                    const screenTrack = screenStream.getVideoTracks()[0];
+
+                    isScreenSharing = true;
+
+                    // Tüm mevcut kişilere 2. kanal olarak ekranı yolla
+                    Object.keys(peerConnections).forEach(id => buildScreenLink(id));
+
+                    // Lokal UI Güncellemesi
+                    screenVideo.srcObject = screenStream;
+                    document.getElementById('screen-owner-name').innerText = "Sizin Ekranınız";
+                    
+                    screenShareView.classList.remove('hidden');
+                    screenShareView.classList.add('flex-1');
+                    videoGrid.classList.remove('flex-1');
+                    videoGrid.classList.add('screen-active'); // Kameraları alta şerit olarak indir
+
+                    btn.classList.replace('bg-slate-800', 'bg-sky-500');
+                    btn.classList.replace('text-sky-400', 'text-white');
+
+                    screenTrack.onended = () => stopScreenShare();
+                } else {
+                    stopScreenShare();
+                }
+            } catch (err) { console.error("Ekran paylaşımı hatası:", err); }
+        };
+
+        function stopScreenShare() {
+            if (screenStream) screenStream.getTracks().forEach(t => t.stop());
+            screenStream = null;
+            isScreenSharing = false;
+
+            // Ekran bağlantılarını temizle
+            Object.values(screenPCs).forEach(pc => pc.close());
+            screenPCs = {};
+            
+            // UI Eski haline dön
+            screenShareView.classList.add('hidden');
+            screenShareView.classList.remove('flex-1');
+            videoGrid.classList.remove('screen-active');
+            videoGrid.classList.add('flex-1');
+            
+            const btn = document.getElementById('share-screen');
+            btn.classList.replace('bg-sky-500', 'bg-slate-800');
+            btn.classList.replace('text-white', 'text-sky-400');
+
+            if (p2pChannel) p2pChannel.send({ type: 'broadcast', event: 'screen-stop', payload: { userId: myClientId } });
+        }
+
+        // ==========================================
+        // GELİŞMİŞ BEYAZ TAHTA MOTORU
+        // ==========================================
+        function setupWhiteboardEngine() {
+            whiteboardCanvas.width = 1200;
+            whiteboardCanvas.height = 700;
+            boardCtx.lineCap = 'round';
+            boardCtx.lineJoin = 'round';
+
+            document.querySelectorAll('.wb-tool').forEach(btn => {
+                btn.onclick = () => {
+                    document.querySelectorAll('.wb-tool').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    currentTool = btn.dataset.tool;
+                    if(currentTool === 'eraser') whiteboardCanvas.style.cursor = 'cell';
+                    else whiteboardCanvas.style.cursor = 'crosshair';
+                }
+            });
+
+            document.querySelectorAll('.wb-color').forEach(btn => {
+                btn.onclick = () => {
+                    document.querySelectorAll('.wb-color').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    currentColor = btn.dataset.color;
+                }
+            });
+
+            document.getElementById('custom-color-picker').oninput = (e) => {
+                currentColor = e.target.value;
+                document.querySelectorAll('.wb-color').forEach(b => b.classList.remove('active'));
+                e.target.parentElement.style.borderColor = currentColor;
+            };
+
+            whiteboardCanvas.addEventListener('mousedown', (e) => {
+                isDrawing = true;
+                const coords = getCanvasCoordinates(e);
+                startX = coords[0]; startY = coords[1];
+                wbSnapshot = boardCtx.getImageData(0, 0, whiteboardCanvas.width, whiteboardCanvas.height);
+            });
+
+            whiteboardCanvas.addEventListener('mousemove', (e) => {
+                if (!isDrawing) return;
+                const [curX, curY] = getCanvasCoordinates(e);
+
+                if (currentTool === 'pen' || currentTool === 'eraser') {
+                    drawShape(currentTool, startX, startY, curX, curY, currentColor);
+                    if (p2pChannel) p2pChannel.send({ type: 'broadcast', event: 'draw', payload: { type: currentTool, x1: startX, y1: startY, x2: curX, y2: curY, color: currentColor } });
+                    startX = curX; startY = curY;
+                } else {
+                    boardCtx.putImageData(wbSnapshot, 0, 0);
+                    drawShape(currentTool, startX, startY, curX, curY, currentColor);
+                }
+            });
+
+            whiteboardCanvas.addEventListener('mouseup', (e) => {
+                if (!isDrawing) return;
+                isDrawing = false;
+                const [curX, curY] = getCanvasCoordinates(e);
+
+                if (currentTool !== 'pen' && currentTool !== 'eraser') {
+                    boardCtx.putImageData(wbSnapshot, 0, 0);
+                    drawShape(currentTool, startX, startY, curX, curY, currentColor);
+                    if (p2pChannel) p2pChannel.send({ type: 'broadcast', event: 'draw', payload: { type: currentTool, x1: startX, y1: startY, x2: curX, y2: curY, color: currentColor } });
+                }
+            });
+            whiteboardCanvas.addEventListener('mouseout', () => isDrawing = false);
+        }
+
+        function getCanvasCoordinates(e) {
+            const rect = whiteboardCanvas.getBoundingClientRect();
+            return [ ((e.clientX - rect.left) / rect.width) * whiteboardCanvas.width, ((e.clientY - rect.top) / rect.height) * whiteboardCanvas.height ];
+        }
+
+        function drawShape(type, x1, y1, x2, y2, color) {
+            boardCtx.beginPath();
+            boardCtx.strokeStyle = type === 'eraser' ? '#ffffff' : color;
+            boardCtx.lineWidth = type === 'eraser' ? 20 : 3;
+
+            if (type === 'pen' || type === 'eraser' || type === 'line') {
+                boardCtx.moveTo(x1, y1); boardCtx.lineTo(x2, y2);
+            } else if (type === 'rect') {
+                boardCtx.rect(x1, y1, x2 - x1, y2 - y1);
+            } else if (type === 'circle') {
+                const radius = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+                boardCtx.arc(x1, y1, radius, 0, 2 * Math.PI);
+            }
+            boardCtx.stroke();
+        }
+
+        function remoteDrawAction(data) { drawShape(data.type, data.x1, data.y1, data.x2, data.y2, data.color); }
+
+        document.getElementById('clear-board-btn').onclick = () => {
+            clearBoardLocal();
+            if (p2pChannel) p2pChannel.send({ type: 'broadcast', event: 'clear-board' });
+        };
+        function clearBoardLocal() { boardCtx.clearRect(0, 0, whiteboardCanvas.width, whiteboardCanvas.height); }
+
+        // UI VE MEDYA KONTROLLERİ
+        const gridBtn = document.getElementById('view-grid-btn');
+        const boardBtn = document.getElementById('view-board-btn');
+        const boardContainer = document.getElementById('whiteboard-container');
+
+        gridBtn.onclick = () => {
+            gridBtn.className = "bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all";
+            boardBtn.className = "text-slate-400 hover:text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all";
+            boardContainer.classList.add('hidden');
+        };
+
+        boardBtn.onclick = () => {
+            boardBtn.className = "bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all";
+            gridBtn.className = "text-slate-400 hover:text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all";
+            boardContainer.classList.remove('hidden');
+        };
+
+        document.getElementById('video-filter-select').onchange = (e) => {
+            localVideo.className = `local-mirror filter-${e.target.value}`;
+            if (p2pChannel) p2pChannel.send({ type: 'broadcast', event: 'filter-broadcast', payload: { userId: myClientId, filter: e.target.value } });
+        };
+
+        const chatInput = document.getElementById('chat-input');
+        const chatMessages = document.getElementById('chat-messages');
+        document.getElementById('send-chat-btn').onclick = sendChatMessage;
+        chatInput.onkeypress = (e) => { if (e.key === 'Enter') sendChatMessage(); };
+
+        function sendChatMessage() {
+            const msg = chatInput.value.trim();
+            if (!msg) return;
+            renderChatMessage("Siz", msg);
+            if (p2pChannel) p2pChannel.send({ type: 'broadcast', event: 'chat', payload: { sender: userName, text: msg } });
+            chatInput.value = "";
+        }
+        function renderChatMessage(sender, text) {
+            const div = document.createElement('div');
+            div.className = "bg-slate-950 p-2.5 rounded-xl border border-slate-800/40";
+            div.innerHTML = `<span class="block text-[11px] font-bold text-emerald-400 mb-0.5">${sender}</span><p class="text-slate-200 font-medium">${text}</p>`;
+            chatMessages.appendChild(div);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function sendReaction(emoji) {
+            showEmojiAnimation(emoji);
+            if(p2pChannel) p2pChannel.send({ type: 'broadcast', event: 'emoji', payload: { emoji: emoji } });
+        }
+        function showEmojiAnimation(emoji) {
+            const div = document.createElement('div');
+            div.className = 'neon-emoji'; div.innerText = emoji;
+            div.style.left = Math.random() * 65 + 15 + 'vw';
+            document.body.appendChild(div);
+            setTimeout(() => div.remove(), 2500);
+        }
+
+        // MİKROFON KONTROLÜ (GELİŞMİŞ SENKRONİZASYON)
+        document.getElementById('toggle-mic').onclick = () => {
+            const track = localStream.getAudioTracks()[0];
+            if(track) {
+                track.enabled = !track.enabled;
+                const isMuted = !track.enabled;
+                
+                // Lokal İkonu Güncelle
+                document.getElementById('local-mic-icon').className = isMuted ? "fa-solid fa-microphone-slash text-red-500 mr-2" : "fa-solid fa-microphone text-emerald-400 mr-2";
+                document.getElementById('toggle-mic').innerHTML = isMuted ? `<i class="fa-solid fa-microphone-slash text-red-500"></i>` : `<i class="fa-solid fa-microphone"></i>`;
+                
+                // Ağdaki Diğer Kullanıcılara "Sesi Kapattım" Sinyali Gönder
+                if (p2pChannel) {
+                    p2pChannel.send({ type: 'broadcast', event: 'mic-toggle', payload: { userId: myClientId, isMuted: isMuted } });
+                }
+            }
+        };
+
+        // KAMERA KONTROLÜ
+        document.getElementById('toggle-cam').onclick = () => {
+            const track = localStream.getVideoTracks()[0];
+            if(track) {
+                track.enabled = !track.enabled;
+                localVideo.style.opacity = track.enabled ? "1" : "0";
+                document.getElementById('toggle-cam').innerHTML = track.enabled ? `<i class="fa-solid fa-video"></i>` : `<i class="fa-solid fa-video-slash text-red-500"></i>`;
+            }
+        };
+
+        document.getElementById('hangup-btn').onclick = () => { if(confirm("Ayrılmak istiyor musunuz?")) location.reload(); };
+
+        function startTimer() {
+            let elapsed = 0;
+            setInterval(() => {
+                elapsed++;
+                document.getElementById('meeting-timer').innerText = `${String(Math.floor(elapsed / 60)).padStart(2, '0')}:${String(elapsed % 60).padStart(2, '0')}`;
+            }, 1000);
+        }
+    </script>
+</body>
+</html>
