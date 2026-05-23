@@ -3,30 +3,30 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MailmasterTalk Mega Pro - v5.7</title>
+    <title>MailmasterTalk Mega Pro - v5.9 (Tablet Friendly)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         body { font-family: 'Inter', sans-serif; overflow: hidden; }
         
-        /* Normal Galeri Düzeni */
-        .video-matrix { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; width: 100%; height: 100%; align-content: start; transition: all 0.3s; }
+        /* Normal Galeri Düzeni - Tablet için minimum kart boyutu 180px'e çekildi */
+        .video-matrix { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; width: 100%; height: 100%; align-content: start; transition: all 0.3s; }
         
         /* Ekran Paylaşımı Aktifken Kamera Şeridi Düzeni (YATAY) */
         .video-matrix.screen-active {
             display: flex;
             flex-direction: row;
             flex-wrap: nowrap;
-            height: 160px;
-            min-height: 160px;
+            height: 130px;
+            min-height: 130px;
             overflow-x: auto;
             overflow-y: hidden;
             align-items: center;
             padding-bottom: 0.5rem;
         }
         .video-matrix.screen-active .video-wrapper {
-            width: 220px;
+            width: 180px;
             height: 100%;
             flex-shrink: 0;
             aspect-ratio: auto;
@@ -36,35 +36,24 @@
         video { width: 100%; height: 100%; object-fit: cover; transition: filter 0.3s ease; }
         .local-mirror { transform: scaleX(-1); }
         
-        .user-tag { position: absolute; bottom: 8px; left: 8px; background: rgba(15, 23, 42, 0.75); color: #f8fafc; padding: 4px 8px; border-radius: 0.5rem; font-size: 0.7rem; font-weight: 600; backdrop-filter: blur(4px); border: 1px solid rgba(255,255,255,0.05); z-index: 10; display: flex; align-items: center; }
+        .user-tag { position: absolute; bottom: 6px; left: 6px; background: rgba(15, 23, 42, 0.75); color: #f8fafc; padding: 3px 6px; border-radius: 0.375rem; font-size: 0.65rem; font-weight: 600; backdrop-filter: blur(4px); border: 1px solid rgba(255,255,255,0.05); z-index: 10; display: flex; align-items: center; }
 
         .filter-noir { filter: grayscale(100%) contrast(1.3); }
         .filter-cyber { filter: hue-rotate(85deg) saturate(2.5) contrast(1.1); }
         .filter-sepia { filter: sepia(85%) saturate(1.2); }
         .filter-none { filter: none; }
 
-        /* GÜNCELLENEN: DUVARA VEYA TAVANA ÇARPMAYAN HAVADA ERİYEN EMOJI SİSTEMİ */
+        /* Havada Eriyen Sınırlandırılmış Emoji Sistemi */
         @keyframes emojiAnimation {
-            0% { 
-                transform: translateY(0) scale(0.6) rotate(0deg); 
-                opacity: 0; 
-            }
-            15% { 
-                opacity: 1; 
-            }
-            65% { 
-                opacity: 1; 
-            }
-            90%, 100% { 
-                /* Üst navigasyon barına ve tavana çarpmaması için yükseklik -65vh yapıldı ve erken eritildi */
-                transform: translateY(-65vh) scale(1.4) rotate(15deg); 
-                opacity: 0; 
-            }
+            0% { transform: translateY(0) scale(0.6) rotate(0deg); opacity: 0; }
+            15% { opacity: 1; }
+            65% { opacity: 1; }
+            90%, 100% { transform: translateY(-65vh) scale(1.4) rotate(15deg); opacity: 0; }
         }
         .neon-emoji { 
             position: fixed; 
-            bottom: 120px; /* Alt barın üstünden başlar */
-            font-size: 4.5rem; 
+            bottom: 140px; 
+            font-size: 3.5rem; 
             pointer-events: none; 
             z-index: 999999; 
             animation: emojiAnimation 3.0s ease-out forwards;
@@ -84,52 +73,53 @@
 <body class="bg-slate-950 text-slate-100 h-screen flex flex-col justify-between select-none">
 
     <div id="lobby-screen" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950 px-4">
-        <div class="bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-2xl max-w-md w-full border-t-4 border-t-emerald-500">
-            <h1 class="text-3xl font-black text-center bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent mb-1">MailmasterTalk</h1>
-            <p class="text-center text-slate-400 text-xs mb-6 tracking-widest font-semibold uppercase">Mega Workspace Network</p>
+        <div class="bg-slate-900 border border-slate-800 p-6 md:p-8 rounded-2xl shadow-2xl max-w-md w-full border-t-4 border-t-emerald-500">
+            <h1 class="text-2xl md:text-3xl font-black text-center bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent mb-1">MailmasterTalk</h1>
+            <p class="text-center text-slate-400 text-[10px] mb-6 tracking-widest font-semibold uppercase">Mega Workspace Network</p>
             <div class="space-y-4">
                 <div>
                     <label class="text-xs font-bold text-slate-400 uppercase">Adınız</label>
-                    <input id="username-input" type="text" placeholder="Örn: Emir" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 mt-1 focus:border-emerald-500 text-white outline-none">
+                    <input id="username-input" type="text" placeholder="Örn: Emir" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 mt-1 focus:border-emerald-500 text-white outline-none text-sm">
                 </div>
                 <div>
                     <label class="text-xs font-bold text-slate-400 uppercase">Toplantı Oda Kodu</label>
-                    <input id="room-input" type="text" placeholder="Örn: master-oda" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 mt-1 focus:border-emerald-500 text-white font-mono">
+                    <input id="room-input" type="text" placeholder="Örn: master-oda" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 mt-1 focus:border-emerald-500 text-white font-mono text-sm">
                 </div>
-                <button id="join-btn" class="w-full bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 text-white font-bold py-3.5 rounded-xl shadow-lg transition transform active:scale-95">Toplantıya Katıl</button>
+                <button id="join-btn" class="w-full bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 text-white font-bold py-3.5 rounded-xl shadow-lg transition transform active:scale-95 text-sm">Toplantıya Katıl</button>
             </div>
         </div>
     </div>
 
-    <header class="bg-slate-900/60 border-b border-slate-800/80 p-4 flex justify-between items-center px-6 backdrop-blur-md z-10">
-        <div class="flex items-center gap-3">
-            <span class="font-black text-xl tracking-tight">Mailmaster<span class="text-emerald-400">Talk</span></span>
-            <div class="bg-emerald-500/10 text-[11px] px-3 py-1.5 rounded-full text-emerald-400 border border-emerald-500/20 font-bold font-mono flex items-center gap-2">
+    <header class="bg-slate-900/60 border-b border-slate-800/80 p-3 md:p-4 flex justify-between items-center px-4 md:px-6 backdrop-blur-md z-10">
+        <div class="flex items-center gap-2 md:gap-3">
+            <span class="font-black text-lg md:text-xl tracking-tight">Mailmaster<span class="text-emerald-400">Talk</span></span>
+            <div class="bg-emerald-500/10 text-[10px] md:text-[11px] px-2.5 py-1 rounded-full text-emerald-400 border border-emerald-500/20 font-bold font-mono flex items-center gap-1.5">
                 <span>ODA: <span id="current-room-text">...</span></span>
-                <button id="copy-room-link-btn" class="text-slate-400 hover:text-emerald-300 transition-all ml-1" title="Oda Linkini Kopyala">
+                <button id="copy-room-link-btn" class="text-slate-400 hover:text-emerald-300 transition-all ml-0.5" title="Oda Linkini Kopyala">
                     <i class="fa-regular fa-copy cursor-pointer"></i>
                 </button>
             </div>
         </div>
-        <div class="flex items-center gap-4">
-            <div class="bg-slate-950 border border-slate-800 p-1 rounded-xl flex gap-1">
-                <button id="view-grid-btn" class="bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all"><i class="fa-solid fa-table-cells-large mr-1"></i> Galeri</button>
-                <button id="view-board-btn" class="text-slate-400 hover:text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all"><i class="fa-solid fa-chalkboard mr-1"></i> Beyaz Tahta</button>
+        <div class="flex items-center gap-2 md:gap-4">
+            <div class="bg-slate-950 border border-slate-800 p-1 rounded-xl flex gap-0.5">
+                <button id="view-grid-btn" class="bg-emerald-500 text-white px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all"><i class="fa-solid fa-table-cells-large mr-1"></i> Galeri</button>
+                <button id="view-board-btn" class="text-slate-400 hover:text-white px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all"><i class="fa-solid fa-chalkboard mr-1"></i> Tahta</button>
             </div>
-            <div class="bg-slate-900 border border-slate-800 text-slate-300 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-2">
+            <div class="bg-slate-900 border border-slate-800 text-slate-300 px-2.5 py-1.5 rounded-xl text-[11px] font-bold flex items-center gap-1.5">
                 <i class="fa-regular fa-clock text-emerald-400"></i> <span id="meeting-timer">00:00</span>
             </div>
         </div>
     </header>
 
-    <div class="flex-1 flex overflow-hidden relative p-4 gap-4">
-        <div class="flex-1 flex flex-col relative h-full">
-            <div id="screen-share-view" class="hidden w-full bg-slate-950 rounded-xl border-2 border-sky-500/50 overflow-hidden mb-4 relative shadow-[0_0_20px_rgba(14,165,233,0.3)]">
+    <div class="flex-1 flex flex-col md:flex-row overflow-hidden relative p-2 md:p-4 gap-2 md:gap-4 min-h-0">
+        
+        <div class="flex-1 flex flex-col relative h-full min-h-0">
+            <div id="screen-share-view" class="hidden w-full bg-slate-950 rounded-xl border-2 border-sky-500/50 overflow-hidden mb-2 md:mb-4 relative shadow-[0_0_20px_rgba(14,165,233,0.3)] flex-1 min-h-0">
                 <video id="screenVideo" autoplay playsinline class="w-full h-full"></video>
                 <div class="user-tag"><i class="fa-solid fa-desktop text-sky-400 mr-2"></i> <span id="screen-owner-name">Ekran Paylaşımı</span></div>
             </div>
 
-            <div id="video-grid" class="video-matrix flex-1">
+            <div id="video-grid" class="video-matrix flex-1 overflow-y-auto min-h-0">
                 <div class="video-wrapper" id="local-video-wrapper">
                     <video id="localVideo" autoplay muted playsinline class="local-mirror filter-none"></video>
                     <div class="user-tag"><i id="local-mic-icon" class="fa-solid fa-microphone text-emerald-400 mr-2"></i> <span id="local-name-tag">Siz</span></div>
@@ -138,64 +128,64 @@
 
             <div id="whiteboard-container" class="hidden absolute inset-0 bg-slate-900 rounded-xl border border-slate-800 flex flex-col overflow-hidden z-20">
                 <div class="bg-slate-950 p-2 border-b border-slate-800 flex justify-between items-center px-4 flex-wrap gap-2">
-                    <div class="flex items-center gap-2 bg-slate-900 border border-slate-800 p-1 rounded-lg">
+                    <div class="flex items-center gap-2 bg-slate-900 border border-slate-800 p-1 rounded-lg flex-wrap">
                         <button class="wb-tool active" data-tool="pen" title="Kalem"><i class="fa-solid fa-pen"></i></button>
                         <button class="wb-tool" data-tool="eraser" title="Silgi"><i class="fa-solid fa-eraser"></i></button>
                         <button class="wb-tool" data-tool="rect" title="Dikdörtgen"><i class="fa-regular fa-square"></i></button>
                         <button class="wb-tool" data-tool="circle" title="Çember"><i class="fa-regular fa-circle"></i></button>
                         <button class="wb-tool" data-tool="line" title="Düz Çizgi"><i class="fa-solid fa-minus"></i></button>
-                        <div class="w-px h-5 bg-slate-700 mx-2"></div>
-                        <div class="flex items-center gap-2">
-                            <button class="wb-color w-5 h-5 rounded-full bg-[#1e293b] border-2 border-slate-500 active" data-color="#1e293b"></button>
-                            <button class="wb-color w-5 h-5 rounded-full bg-[#ef4444] border-2 border-transparent" data-color="#ef4444"></button>
-                            <button class="wb-color w-5 h-5 rounded-full bg-[#3b82f6] border-2 border-transparent" data-color="#3b82f6"></button>
-                            <button class="wb-color w-5 h-5 rounded-full bg-[#10b981] border-2 border-transparent" data-color="#10b981"></button>
-                            <div class="relative w-6 h-6 rounded overflow-hidden border-2 border-transparent ml-1 outline outline-1 outline-slate-700">
-                                <input type="color" id="custom-color-picker" class="absolute -top-2 -left-2 w-10 h-10 cursor-pointer" value="#a855f7">
+                        <div class="w-px h-5 bg-slate-700 mx-1"></div>
+                        <div class="flex items-center gap-1.5">
+                            <button class="wb-color w-4 h-4 rounded-full bg-[#1e293b] border-2 border-slate-500 active" data-color="#1e293b"></button>
+                            <button class="wb-color w-4 h-4 rounded-full bg-[#ef4444] border-2 border-transparent" data-color="#ef4444"></button>
+                            <button class="wb-color w-4 h-4 rounded-full bg-[#3b82f6] border-2 border-transparent" data-color="#3b82f6"></button>
+                            <button class="wb-color w-4 h-4 rounded-full bg-[#10b981] border-2 border-transparent" data-color="#10b981"></button>
+                            <div class="relative w-5 h-5 rounded overflow-hidden border-2 border-transparent ml-0.5 outline outline-1 outline-slate-700">
+                                <input type="color" id="custom-color-picker" class="absolute -top-2 -left-2 w-8 h-8 cursor-pointer" value="#a855f7">
                             </div>
                         </div>
                     </div>
-                    <button id="clear-board-btn" class="bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white border border-red-500/20 px-3 py-1.5 rounded-lg text-xs font-bold transition-all"><i class="fa-solid fa-trash mr-1"></i> Tahtayı Temizle</button>
+                    <button id="clear-board-btn" class="bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white border border-red-500/20 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all"><i class="fa-solid fa-trash mr-1"></i> Temizle</button>
                 </div>
                 <canvas id="whiteboard" class="flex-1 bg-white cursor-crosshair"></canvas>
             </div>
         </div>
 
-        <div id="chat-panel" class="w-80 bg-slate-900 border border-slate-800 rounded-xl flex flex-col overflow-hidden shadow-2xl transition-all duration-300">
-            <div class="bg-slate-950 p-3 border-b border-slate-800 font-bold text-xs tracking-wider text-slate-400 flex items-center justify-between">
+        <div id="chat-panel" class="w-full md:w-72 lg:w-80 h-40 md:h-full flex-shrink-0 bg-slate-900 border border-slate-800 rounded-xl flex flex-col overflow-hidden shadow-2xl transition-all duration-300">
+            <div class="bg-slate-950 p-2.5 border-b border-slate-800 font-bold text-[11px] tracking-wider text-slate-400 flex items-center justify-between">
                 <span><i class="fa-regular fa-comments text-emerald-400 mr-1.5"></i> CANLI SOHBET</span>
                 <span class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
             </div>
-            <div id="chat-messages" class="flex-1 p-4 overflow-y-auto space-y-3 text-sm"></div>
-            <div class="p-3 bg-slate-950 border-t border-slate-800 flex gap-2">
-                <input id="chat-input" type="text" placeholder="Mesajınızı yazın..." class="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-emerald-500 font-medium">
-                <button id="send-chat-btn" class="bg-emerald-500 hover:bg-emerald-400 text-white w-9 h-9 rounded-xl flex items-center justify-center transition-all"><i class="fa-solid fa-paper-plane text-xs"></i></button>
+            <div id="chat-messages" class="flex-1 p-3 overflow-y-auto space-y-2 text-xs"></div>
+            <div class="p-2 bg-slate-950 border-t border-slate-800 flex gap-2">
+                <input id="chat-input" type="text" placeholder="Mesaj yazın..." class="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-emerald-500 font-medium">
+                <button id="send-chat-btn" class="bg-emerald-500 hover:bg-emerald-400 text-white w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 transition-all"><i class="fa-solid fa-paper-plane text-xs"></i></button>
             </div>
         </div>
     </div>
 
-    <footer class="bg-slate-900/80 border-t border-slate-800/60 p-4 flex justify-between items-center px-6 gap-4 backdrop-blur-md z-10">
-        <div class="flex items-center gap-2">
-            <select id="video-filter-select" class="bg-slate-950 border border-slate-800 text-xs text-slate-300 px-3 py-2.5 rounded-xl focus:border-emerald-500 outline-none font-semibold cursor-pointer">
-                <option value="none">Filtre Yok (Normal)</option>
-                <option value="noir">Sinematik Siyah-Beyaz</option>
-                <option value="cyber">Cyberpunk Neon</option>
-                <option value="sepia">Nostaljik Sepya</option>
+    <footer class="bg-slate-900/80 border-t border-slate-800/60 p-3 md:p-4 flex flex-wrap justify-center md:justify-between items-center px-4 md:px-6 gap-3 backdrop-blur-md z-10">
+        <div class="flex items-center">
+            <select id="video-filter-select" class="bg-slate-950 border border-slate-800 text-[11px] text-slate-300 px-2.5 py-2 rounded-xl focus:border-emerald-500 outline-none font-semibold cursor-pointer">
+                <option value="none">Filtre Yok</option>
+                <option value="noir">Siyah-Beyaz</option>
+                <option value="cyber">Cyberpunk</option>
+                <option value="sepia">Sepya</option>
             </select>
         </div>
-        <div class="flex items-center gap-3">
-            <button id="toggle-mic" class="bg-slate-800 hover:bg-slate-700 text-slate-200 w-12 h-12 rounded-xl flex items-center justify-center text-lg border border-slate-700 shadow-md"><i class="fa-solid fa-microphone"></i></button>
-            <button id="toggle-cam" class="bg-slate-800 hover:bg-slate-700 text-slate-200 w-12 h-12 rounded-xl flex items-center justify-center text-lg border border-slate-700 shadow-md"><i class="fa-solid fa-video"></i></button>
-            <button id="share-screen" class="bg-slate-800 hover:bg-slate-700 w-12 h-12 rounded-xl flex items-center justify-center text-lg border border-slate-700 text-sky-400 shadow-md transition-all"><i class="fa-solid fa-desktop"></i></button>
-            <div class="bg-slate-950 border border-slate-800 px-4 py-2 rounded-xl flex items-center gap-3.5 shadow-inner">
-                <button onclick="sendReaction('✨')" class="hover:scale-125 transition text-2xl">✨</button>
-                <button onclick="sendReaction('🔥')" class="hover:scale-125 transition text-2xl">🔥</button>
-                <button onclick="sendReaction('👏')" class="hover:scale-125 transition text-2xl">👏</button>
-                <button onclick="sendReaction('💡')" class="hover:scale-125 transition text-2xl">💡</button>
+        <div class="flex items-center gap-2 md:gap-3 flex-wrap">
+            <button id="toggle-mic" class="bg-slate-800 hover:bg-slate-700 text-slate-200 w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center text-base md:text-lg border border-slate-700 shadow-md"><i class="fa-solid fa-microphone"></i></button>
+            <button id="toggle-cam" class="bg-slate-800 hover:bg-slate-700 text-slate-200 w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center text-base md:text-lg border border-slate-700 shadow-md"><i class="fa-solid fa-video"></i></button>
+            <button id="share-screen" class="bg-slate-800 hover:bg-slate-700 w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center text-base md:text-lg border border-slate-700 text-sky-400 shadow-md transition-all"><i class="fa-solid fa-desktop"></i></button>
+            <div class="bg-slate-950 border border-slate-800 px-3 py-1.5 md:py-2 rounded-xl flex items-center gap-3 shadow-inner">
+                <button onclick="sendReaction('✨')" class="hover:scale-125 transition text-xl md:text-2xl">✨</button>
+                <button onclick="sendReaction('🔥')" class="hover:scale-125 transition text-xl md:text-2xl">🔥</button>
+                <button onclick="sendReaction('👏')" class="hover:scale-125 transition text-xl md:text-2xl">👏</button>
+                <button onclick="sendReaction('💡')" class="hover:scale-125 transition text-xl md:text-2xl">💡</button>
             </div>
-            <button id="hangup-btn" class="bg-red-600 hover:bg-red-500 text-white w-12 h-12 rounded-xl flex items-center justify-center text-lg border border-red-500 shadow-lg ml-2"><i class="fa-solid fa-phone-slash"></i></button>
+            <button id="hangup-btn" class="bg-red-600 hover:bg-red-500 text-white w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center text-base md:text-lg border border-red-500 shadow-lg"><i class="fa-solid fa-phone-slash"></i></button>
         </div>
-        <div class="w-20 hidden md:block"></div>
+        <div class="w-20 hidden lg:block"></div>
     </footer>
 
     <script>
@@ -203,7 +193,14 @@
         const SUPABASE_ANON_KEY = "sb_publishable_AIwx6jSgROBXJeaAs-zzQw_Oo1Zz9Vd"; 
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         
-        const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+        const rtcConfig = { 
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' },
+                { urls: 'stun:stun.ekiga.net' }
+            ] 
+        };
         const myClientId = Math.random().toString(36).substring(2, 15);
 
         const videoGrid = document.getElementById('video-grid');
@@ -223,7 +220,6 @@
 
         let isDrawing = false; let currentTool = 'pen'; let currentColor = '#1e293b'; let startX = 0, startY = 0; let wbSnapshot = null;
 
-        // GÜNCELLENEN: URL Parametresi Yakalama (GitHub Pages Dostu)
         window.addEventListener('DOMContentLoaded', async () => {
             const urlParams = new URLSearchParams(window.location.search);
             const roomParam = urlParams.get('room');
@@ -235,7 +231,7 @@
                 localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
                 localVideo.srcObject = localStream;
                 setupWhiteboardEngine();
-            } catch (e) { alert("Donanım erişim izni reddedildi!"); }
+            } catch (e) { console.error("Kamera/Mikrofon izni alınamadı:", e); }
         });
 
         document.getElementById('join-btn').onclick = () => {
@@ -253,7 +249,6 @@
             initSupabaseMeshNetwork(rId);
         };
 
-        // GÜNCELLENEN: GitHub Pages Alt Klasörünü Koruyan Davetiye Linki Üretici (?room=odaKodu)
         document.getElementById('copy-room-link-btn').onclick = async () => {
             if (!currentRoomId) return;
             const baseUrl = window.location.origin + window.location.pathname.split('?')[0].split('#')[0];
@@ -293,8 +288,8 @@
                 })
                 .on('broadcast', { event: 'screen-stop' }, ({ payload }) => {
                     if (screenPCs[payload.userId]) { screenPCs[payload.userId].close(); delete screenPCs[payload.userId]; }
-                    screenShareView.classList.add('hidden'); screenShareView.classList.remove('flex-1');
-                    screenVideo.srcObject = null; videoGrid.classList.remove('screen-active'); videoGrid.classList.add('flex-1');
+                    screenShareView.classList.add('hidden');
+                    screenVideo.srcObject = null; videoGrid.classList.remove('screen-active');
                 })
                 .subscribe(async (status) => { if (status === 'SUBSCRIBED') await p2pChannel.track({ name: userName }); });
         }
@@ -303,7 +298,10 @@
             Object.keys(peerConnections).forEach(id => { if (!state[id]) removeUserConnection(id); });
             Object.keys(state).forEach(id => {
                 if (id === myClientId) return;
-                if (myClientId > id && !peerConnections[id]) buildWebRTCLink(id, state[id][0].name, true);
+                const remoteName = (state[id] && state[id][0] && state[id][0].name) ? state[id][0].name : "Katılımcı";
+                if (myClientId > id && !peerConnections[id]) {
+                    buildWebRTCLink(id, remoteName, true);
+                }
             });
         }
 
@@ -313,7 +311,11 @@
                 case 'offer':
                     await buildWebRTCLink(rId, data.senderName, false);
                     await peerConnections[rId].setRemoteDescription(new RTCSessionDescription(data.offer));
-                    if (iceQueues[rId]) while(iceQueues[rId].length > 0) await peerConnections[rId].addIceCandidate(iceQueues[rId].shift());
+                    if (iceQueues[rId]) {
+                        while(iceQueues[rId].length > 0) {
+                            await peerConnections[rId].addIceCandidate(iceQueues[rId].shift()).catch(e => console.log(e));
+                        }
+                    }
                     const answer = await peerConnections[rId].createAnswer();
                     await peerConnections[rId].setLocalDescription(answer);
                     sendSignalData({ type: 'answer', answer: answer, senderName: userName }, rId);
@@ -321,12 +323,20 @@
                 case 'answer':
                     if (peerConnections[rId]) {
                         await peerConnections[rId].setRemoteDescription(new RTCSessionDescription(data.answer));
-                        if (iceQueues[rId]) while(iceQueues[rId].length > 0) await peerConnections[rId].addIceCandidate(iceQueues[rId].shift());
+                        if (iceQueues[rId]) {
+                            while(iceQueues[rId].length > 0) {
+                                await peerConnections[rId].addIceCandidate(iceQueues[rId].shift()).catch(e => console.log(e));
+                            }
+                        }
                     }
                     break;
                 case 'ice':
-                    if (peerConnections[rId] && peerConnections[rId].remoteDescription) await peerConnections[rId].addIceCandidate(new RTCIceCandidate(data.candidate));
-                    else { if (!iceQueues[rId]) iceQueues[rId] = []; iceQueues[rId].push(new RTCIceCandidate(data.candidate)); }
+                    if (peerConnections[rId] && peerConnections[rId].remoteDescription && peerConnections[rId].remoteDescription.type) {
+                        await peerConnections[rId].addIceCandidate(new RTCIceCandidate(data.candidate)).catch(e => console.log(e));
+                    } else { 
+                        if (!iceQueues[rId]) iceQueues[rId] = []; 
+                        iceQueues[rId].push(new RTCIceCandidate(data.candidate)); 
+                    }
                     break;
                 case 'screen-offer':
                     const spc = new RTCPeerConnection(rtcConfig);
@@ -334,8 +344,8 @@
                     spc.ontrack = ev => {
                         screenVideo.srcObject = ev.streams[0];
                         document.getElementById('screen-owner-name').innerText = `${data.senderName} Kişisinin Ekranı`;
-                        screenShareView.classList.remove('hidden'); screenShareView.classList.add('flex-1');
-                        videoGrid.classList.remove('flex-1'); videoGrid.classList.add('screen-active');
+                        screenShareView.classList.remove('hidden');
+                        videoGrid.classList.add('screen-active');
                     };
                     spc.onicecandidate = ev => { if (ev.candidate) sendSignalData({ type: 'screen-ice', candidate: ev.candidate }, rId); };
                     await spc.setRemoteDescription(new RTCSessionDescription(data.offer));
@@ -355,10 +365,14 @@
             if (peerConnections[remoteId]) return;
             const pc = new RTCPeerConnection(rtcConfig);
             peerConnections[remoteId] = pc;
-            pc.addTrack(localStream.getVideoTracks()[0], localStream);
-            pc.addTrack(localStream.getAudioTracks()[0], localStream);
+            
+            if (localStream) {
+                localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+            }
+
             pc.onicecandidate = ev => { if (ev.candidate) sendSignalData({ type: 'ice', candidate: ev.candidate }, remoteId); };
             pc.ontrack = ev => { if (ev.track.kind === 'video') createVideoCard(remoteId, remoteName, ev.streams[0]); };
+            
             if (isInitiator) {
                 const offer = await pc.createOffer(); await pc.setLocalDescription(offer);
                 sendSignalData({ type: 'offer', offer: offer, senderName: userName }, remoteId);
@@ -398,8 +412,8 @@
                     const screenTrack = screenStream.getVideoTracks()[0]; isScreenSharing = true;
                     Object.keys(peerConnections).forEach(id => buildScreenLink(id));
                     screenVideo.srcObject = screenStream; document.getElementById('screen-owner-name').innerText = "Sizin Ekranınız";
-                    screenShareView.classList.remove('hidden'); screenShareView.classList.add('flex-1');
-                    videoGrid.classList.remove('flex-1'); videoGrid.classList.add('screen-active');
+                    screenShareView.classList.remove('hidden');
+                    videoGrid.classList.add('screen-active');
                     btn.classList.replace('bg-slate-800', 'bg-sky-500'); btn.classList.replace('text-sky-400', 'text-white');
                     screenTrack.onended = () => stopScreenShare();
                 } else { stopScreenShare(); }
@@ -410,8 +424,8 @@
             if (screenStream) screenStream.getTracks().forEach(t => t.stop());
             screenStream = null; isScreenSharing = false;
             Object.values(screenPCs).forEach(pc => pc.close()); screenPCs = {};
-            screenShareView.classList.add('hidden'); screenShareView.classList.remove('flex-1');
-            videoGrid.classList.remove('screen-active'); videoGrid.classList.add('flex-1');
+            screenShareView.classList.add('hidden');
+            videoGrid.classList.remove('screen-active');
             const btn = document.getElementById('share-screen');
             btn.classList.replace('bg-sky-500', 'bg-slate-800'); btn.classList.replace('text-white', 'text-sky-400');
             if (p2pChannel) p2pChannel.send({ type: 'broadcast', event: 'screen-stop', payload: { userId: myClientId } });
@@ -495,13 +509,13 @@
         const boardContainer = document.getElementById('whiteboard-container');
 
         gridBtn.onclick = () => {
-            gridBtn.className = "bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all";
-            boardBtn.className = "text-slate-400 hover:text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all";
+            gridBtn.className = "bg-emerald-500 text-white px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all";
+            boardBtn.className = "text-slate-400 hover:text-white px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all";
             boardContainer.classList.add('hidden');
         };
         boardBtn.onclick = () => {
-            boardBtn.className = "bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all";
-            gridBtn.className = "text-slate-400 hover:text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all";
+            boardBtn.className = "bg-emerald-500 text-white px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all";
+            gridBtn.className = "text-slate-400 hover:text-white px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all";
             boardContainer.classList.remove('hidden');
         };
 
@@ -521,8 +535,8 @@
             chatInput.value = "";
         }
         function renderChatMessage(sender, text) {
-            const div = document.createElement('div'); div.className = "bg-slate-950 p-2.5 rounded-xl border border-slate-800/40";
-            div.innerHTML = `<span class="block text-[11px] font-bold text-emerald-400 mb-0.5">${sender}</span><p class="text-slate-200 font-medium">${text}</p>`;
+            const div = document.createElement('div'); div.className = "bg-slate-950 p-2 rounded-xl border border-slate-800/40";
+            div.innerHTML = `<span class="block text-[10px] font-bold text-emerald-400 mb-0.5">${sender}</span><p class="text-slate-200 font-medium">${text}</p>`;
             chatMessages.appendChild(div); chatMessages.scrollTop = chatMessages.scrollHeight;
         }
 
@@ -531,11 +545,9 @@
             if(p2pChannel) p2pChannel.send({ type: 'broadcast', event: 'emoji', payload: { emoji: emoji } });
         }
         
-        // GÜNCELLENEN: Emojileri güvenli orta alanda tutan ve tavandan önce eriten animasyon tetikleyici
         function showEmojiAnimation(emoji) {
             const div = document.createElement('div');
             div.className = 'neon-emoji'; div.innerText = emoji;
-            // Sağ veya soldaki panellere çarpmaması için yatayda %20 ile %75 ekran genişliği arasına sınırlandırdık
             div.style.left = Math.random() * 55 + 20 + 'vw';
             document.body.appendChild(div);
             setTimeout(() => div.remove(), 3100);
