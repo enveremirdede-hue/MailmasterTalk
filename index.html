@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>MailmasterTalk Mega Pro - v6.6 (Screen Share & iPad Fix)</title>
+    <title>MailmasterTalk Mega Pro - v6.8 (Vector State Sync)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -92,7 +92,6 @@
     </header>
 
     <main class="flex-1 min-h-0 flex flex-col md:flex-row p-2 md:p-4 gap-2 md:gap-4 overflow-hidden relative w-full">
-        
         <div class="flex-1 min-h-0 flex flex-col relative rounded-xl overflow-hidden w-full">
             <div id="screen-share-view" class="hidden w-full bg-slate-950 rounded-xl border-2 border-sky-500/50 overflow-hidden mb-2 relative flex-1 min-h-0">
                 <video id="screenVideo" autoplay playsinline class="w-full h-full"></video>
@@ -209,6 +208,10 @@
         let peerConnections = {}; let screenPCs = {}; let iceQueues = {};        
         let userName = "Anonim"; let currentRoomId = ""; let isScreenSharing = false;
         let isDrawing = false; let currentTool = 'pen'; let currentColor = '#1e293b'; let startX = 0, startY = 0; let wbSnapshot = null;
+        
+        // HAFIZA DİZİLERİ (Chat ve Beyaz Tahta Vektör Geçmişi)
+        let chatHistoryArray = [];
+        let wbHistoryArray = [];
 
         window.addEventListener('DOMContentLoaded', async () => {
             const urlParams = new URLSearchParams(window.location.search);
@@ -224,12 +227,21 @@
 
         function resizeCanvasToDisplay() {
             const rect = whiteboardCanvas.parentElement.getBoundingClientRect();
-            if (whiteboardCanvas.width !== rect.width || whiteboardCanvas.height !== rect.height) {
-                const tempBackup = boardCtx.getImageData(0, 0, whiteboardCanvas.width, whiteboardCanvas.height);
-                whiteboardCanvas.width = rect.width;
-                whiteboardCanvas.height = rect.height;
-                boardCtx.putImageData(tempBackup, 0, 0);
+            if (rect.width > 0 && rect.height > 0) {
+                if (whiteboardCanvas.width !== rect.width || whiteboardCanvas.height !== rect.height) {
+                    whiteboardCanvas.width = rect.width;
+                    whiteboardCanvas.height = rect.height;
+                    redrawWhiteboardFromHistory(); // Boyut değişince sıfır kayıpla yeniden çiz
+                }
             }
+        }
+
+        // BÜTÜN ÇİZGİLERİ HAFIZADAN YENİDEN ÇİZEN SİHİRLİ FONKSİYON
+        function redrawWhiteboardFromHistory() {
+            boardCtx.clearRect(0, 0, whiteboardCanvas.width, whiteboardCanvas.height);
+            wbHistoryArray.forEach(stroke => {
+                remoteDrawAction(stroke);
+            });
         }
 
         document.getElementById('join-btn').onclick = () => {
@@ -262,8 +274,38 @@
                 .on('broadcast', { event: 'signal' }, ({ payload }) => { if (payload.targetId === myClientId) handleInboundSignal(payload); })
                 .on('broadcast', { event: 'emoji' }, ({ payload }) => showEmojiAnimation(payload.emoji))
                 .on('broadcast', { event: 'chat' }, ({ payload }) => renderChatMessage(payload.sender, payload.text))
-                .on('broadcast', { event: 'draw' }, ({ payload }) => remoteDrawAction(payload))
+                
+                // Canlı çizim gelince hafızaya ekle ve ekrana bas
+                .on('broadcast', { event: 'draw' }, ({ payload }) => {
+                    wbHistoryArray.push(payload);
+                    remoteDrawAction(payload);
+                })
                 .on('broadcast', { event: 'clear-board' }, () => clearBoardLocal())
+                
+                // VEKTÖREL GEÇMİŞ SENKRONİZASYONU
+                .on('broadcast', { event: 'request-room-history' }, ({ payload }) => {
+                    if (amITheHost(payload.senderId)) {
+                        p2pChannel.send({
+                            type: 'broadcast',
+                            event: 'respond-room-history',
+                            payload: {
+                                targetId: payload.senderId,
+                                wbHistory: wbHistoryArray, // Fotoğraf değil, çizim koordinat listesini yolla
+                                chats: chatHistoryArray
+                            }
+                        });
+                    }
+                })
+                .on('broadcast', { event: 'respond-room-history' }, ({ payload }) => {
+                    if (payload.targetId === myClientId) {
+                        wbHistoryArray = payload.wbHistory || [];
+                        redrawWhiteboardFromHistory(); // Arka planda olsa bile hafızaya yükle
+                        payload.chats.forEach(chat => {
+                            renderChatMessage(chat.sender, chat.text);
+                        });
+                    }
+                })
+
                 .on('broadcast', { event: 'filter-broadcast' }, ({ payload }) => {
                     const targetVideo = document.getElementById(`video_${payload.userId}_cam`);
                     if (targetVideo) targetVideo.className = `filter-${payload.filter}`;
@@ -279,7 +321,26 @@
                     if (screenPCs[payload.userId]) { screenPCs[payload.userId].close(); delete screenPCs[payload.userId]; }
                     screenShareView.classList.add('hidden'); screenVideo.srcObject = null; videoGrid.classList.remove('screen-active');
                 })
-                .subscribe(async (status) => { if (status === 'SUBSCRIBED') await p2pChannel.track({ name: userName }); });
+                .subscribe(async (status) => { 
+                    if (status === 'SUBSCRIBED') {
+                        await p2pChannel.track({ name: userName });
+                        setTimeout(() => {
+                            p2pChannel.send({
+                                type: 'broadcast',
+                                event: 'request-room-history',
+                                payload: { senderId: myClientId }
+                            });
+                        }, 800);
+                    } 
+                });
+        }
+
+        function amITheHost(excludeId) {
+            const presenceState = p2pChannel.presenceState();
+            let activeIds = Object.keys(presenceState);
+            if (excludeId) activeIds = activeIds.filter(id => id !== excludeId);
+            activeIds.sort();
+            return activeIds[0] === myClientId;
         }
 
         function handlePresenceSync(state) {
@@ -356,7 +417,6 @@
             if (screenPCs[id]) { screenPCs[id].close(); delete screenPCs[id]; }
         }
 
-        // BEYAZ TAHTA ÇİZİM MOTORU
         function setupWhiteboardEngine() {
             document.querySelectorAll('.wb-tool').forEach(btn => {
                 btn.onclick = () => {
@@ -383,7 +443,11 @@
                 const coords = getCanvasCoordinates(e); const curX = coords[0]; const curY = coords[1];
                 if (currentTool === 'pen' || currentTool === 'eraser') {
                     drawShape(currentTool, startX, startY, curX, curY, currentColor);
-                    if (p2pChannel) p2pChannel.send({ type: 'broadcast', event: 'draw', payload: { type: currentTool, x1: startX, y1: startY, x2: curX, y2: curY, color: currentColor, w: whiteboardCanvas.width, h: whiteboardCanvas.height } });
+                    
+                    const drawData = { type: currentTool, x1: startX, y1: startY, x2: curX, y2: curY, color: currentColor, w: whiteboardCanvas.width, h: whiteboardCanvas.height };
+                    wbHistoryArray.push(drawData); // Kendi geçmişimize ekle
+                    
+                    if (p2pChannel) p2pChannel.send({ type: 'broadcast', event: 'draw', payload: drawData });
                     startX = curX; startY = curY;
                 } else {
                     boardCtx.putImageData(wbSnapshot, 0, 0); drawShape(currentTool, startX, startY, curX, curY, currentColor);
@@ -395,7 +459,11 @@
                 const coords = getCanvasCoordinates(e); const curX = coords[0]; const curY = coords[1];
                 if (currentTool !== 'pen' && currentTool !== 'eraser') {
                     boardCtx.putImageData(wbSnapshot, 0, 0); drawShape(currentTool, startX, startY, curX, curY, currentColor);
-                    if (p2pChannel) p2pChannel.send({ type: 'broadcast', event: 'draw', payload: { type: currentTool, x1: startX, y1: startY, x2: curX, y2: curY, color: currentColor, w: whiteboardCanvas.width, h: whiteboardCanvas.height } });
+                    
+                    const drawData = { type: currentTool, x1: startX, y1: startY, x2: curX, y2: curY, color: currentColor, w: whiteboardCanvas.width, h: whiteboardCanvas.height };
+                    wbHistoryArray.push(drawData); // Kendi geçmişimize ekle
+                    
+                    if (p2pChannel) p2pChannel.send({ type: 'broadcast', event: 'draw', payload: drawData });
                 }
             });
             whiteboardCanvas.addEventListener('pointercancel', () => isDrawing = false);
@@ -411,7 +479,10 @@
         document.getElementById('clear-board-btn').onclick = () => {
             clearBoardLocal(); if (p2pChannel) p2pChannel.send({ type: 'broadcast', event: 'clear-board' });
         };
-        function clearBoardLocal() { boardCtx.clearRect(0, 0, whiteboardCanvas.width, whiteboardCanvas.height); }
+        function clearBoardLocal() { 
+            boardCtx.clearRect(0, 0, whiteboardCanvas.width, whiteboardCanvas.height); 
+            wbHistoryArray = []; // Geçmişi tamamen sıfırla
+        }
 
         function drawShape(type, x1, y1, x2, y2, color) {
             boardCtx.lineCap = 'round'; boardCtx.lineJoin = 'round';
@@ -429,7 +500,6 @@
             drawShape(data.type, data.x1 * scaleX, data.y1 * scaleY, data.x2 * scaleX, data.y2 * scaleY, data.color);
         }
 
-        // PANEL DEĞİŞTİRİCİLER
         const gridBtn = document.getElementById('view-grid-btn');
         const boardBtn = document.getElementById('view-board-btn');
         const boardContainer = document.getElementById('whiteboard-container');
@@ -443,35 +513,39 @@
             boardBtn.className = "bg-emerald-500 text-white px-3 py-2 md:px-4 md:py-2.5 rounded-lg text-xs md:text-sm font-bold flex items-center shadow-md transition-all";
             gridBtn.className = "text-slate-400 hover:text-white px-3 py-2 md:px-4 md:py-2.5 rounded-lg text-xs md:text-sm font-bold flex items-center transition-all";
             boardContainer.classList.remove('hidden');
-            setTimeout(resizeCanvasToDisplay, 100); 
+            setTimeout(resizeCanvasToDisplay, 50); // Sekme açıldığı an boyutları oturt ve çiz
         };
 
         window.addEventListener('resize', resizeCanvasToDisplay);
 
-        // FİLTRELER
         document.getElementById('video-filter-select').onchange = (e) => {
             localVideo.className = `local-mirror filter-${e.target.value}`;
             if (p2pChannel) p2pChannel.send({ type: 'broadcast', event: 'filter-broadcast', payload: { userId: myClientId, filter: e.target.value } });
         };
 
-        // CHAT ENGINE
         const chatInput = document.getElementById('chat-input');
         const chatMessages = document.getElementById('chat-messages');
         document.getElementById('send-chat-btn').onclick = sendChatMessage;
         chatInput.onkeypress = (e) => { if (e.key === 'Enter') sendChatMessage(); };
 
         function sendChatMessage() {
-            const msg = chatInput.value.trim(); if (!msg) return; renderChatMessage("Siz", msg);
+            const msg = chatInput.value.trim(); if (!msg) return; 
+            renderChatMessage("Siz", msg);
+            chatHistoryArray.push({ sender: userName, text: msg });
             if (p2pChannel) p2pChannel.send({ type: 'broadcast', event: 'chat', payload: { sender: userName, text: msg } });
             chatInput.value = "";
         }
+        
         function renderChatMessage(sender, text) {
+            const alreadyExists = chatHistoryArray.some(c => c.sender === sender && c.text === text);
+            if (!alreadyExists && sender !== "Siz") {
+                chatHistoryArray.push({ sender: sender, text: text });
+            }
             const div = document.createElement('div'); div.className = "bg-slate-950 p-2 rounded-xl border border-slate-800/40";
             div.innerHTML = `<span class="block text-[9px] font-bold text-emerald-400 mb-0.5">${sender}</span><p class="text-slate-200 font-medium">${text}</p>`;
             chatMessages.appendChild(div); chatMessages.scrollTop = chatMessages.scrollHeight;
         }
 
-        // REAKSİYONLAR
         function sendReaction(emoji) {
             showEmojiAnimation(emoji);
             if(p2pChannel) p2pChannel.send({ type: 'broadcast', event: 'emoji', payload: { emoji: emoji } });
@@ -482,7 +556,6 @@
             setTimeout(() => div.remove(), 2600);
         }
 
-        // SES VE KAMERA KONTROLLERİ
         document.getElementById('toggle-mic').onclick = () => {
             const track = localStream.getAudioTracks()[0];
             if(track) {
@@ -501,11 +574,9 @@
             }
         };
 
-        // KÜTÜPHANEYE EKLENEN EKRAN PAYLAŞMA MOTORU (SCREEN SHARING ENGINE)
         document.getElementById('share-screen').onclick = async () => {
             if (!isScreenSharing) {
                 try {
-                    // Ekran yakalama penceresini çağırıyoruz
                     screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
                     screenVideo.srcObject = screenStream;
                     screenShareView.classList.remove('hidden');
@@ -513,19 +584,16 @@
                     isScreenSharing = true;
                     document.getElementById('share-screen').innerHTML = `<i class="fa-solid fa-desktop text-red-500"></i>`;
 
-                    // Odadaki tüm aktif Peer'lara ekran akışını (Stream) teklif olarak gönderiyoruz
                     Object.keys(peerConnections).forEach(async (id) => {
                         const spc = new RTCPeerConnection(rtcConfig);
                         screenPCs[id] = spc;
                         screenStream.getTracks().forEach(track => spc.addTrack(track, screenStream));
                         spc.onicecandidate = ev => { if (ev.candidate) sendSignalData({ type: 'screen-ice', candidate: ev.candidate }, id); };
-                        
                         const offer = await spc.createOffer();
                         await spc.setLocalDescription(offer);
                         sendSignalData({ type: 'screen-offer', offer: offer, senderName: userName }, id);
                     });
 
-                    // Tarayıcının üstündeki kendi "Paylaşımı Durdur" butonuna basılırsa tetiklenir
                     screenStream.getVideoTracks()[0].onended = () => { stopScreenShareLocal(); };
                 } catch (e) { console.error("Ekran paylaşımı başlatılamadı:", e); }
             } else {
@@ -541,8 +609,6 @@
             videoGrid.classList.remove('screen-active');
             isScreenSharing = false;
             document.getElementById('share-screen').innerHTML = `<i class="fa-solid fa-desktop text-sky-400"></i>`;
-            
-            // Diğer kullanıcılara yayını kestiğimizi bildiriyoruz
             if (p2pChannel) p2pChannel.send({ type: 'broadcast', event: 'screen-stop', payload: { userId: myClientId } });
             Object.keys(screenPCs).forEach(id => { if(screenPCs[id]) { screenPCs[id].close(); delete screenPCs[id]; } });
         }
