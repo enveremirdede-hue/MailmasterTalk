@@ -995,217 +995,965 @@
             }
         })();
     </script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation"></script>
+<script>
+        const SUPABASE_URL = "https://atupjeqlzpuqzjpxkjri.supabase.co"; 
+        const SUPABASE_ANON_KEY = "sb_publishable_AIwx6jSgROBXJeaAs-zzQw_Oo1Zz9Vd"; 
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        
+        const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }] };
+        const myClientId = Math.random().toString(36).substring(2, 15);
 
-    <script>
-        (function() {
-            // =========================================================================
-            // 1. ODA LİNKİ KOPYALAMA VE YEŞİL TİK ANİMASYONU
-            // =========================================================================
-            const copyBtn = document.getElementById('copy-room-link-btn');
-            if (copyBtn) {
-                copyBtn.onclick = async function(e) {
-                    e.preventDefault(); e.stopPropagation();
-                    const roomTextEl = document.getElementById('current-room-text');
-                    if (!roomTextEl) return;
-                    
-                    const roomCode = roomTextEl.innerText.trim();
-                    const currentUrl = window.location.origin + window.location.pathname + "?room=" + encodeURIComponent(roomCode);
-                    
-                    try {
-                        await navigator.clipboard.writeText(currentUrl);
-                        const originalIcon = copyBtn.innerHTML;
-                        copyBtn.innerHTML = `<i class="fa-solid fa-check text-emerald-400 animate-bounce"></i>`;
-                        copyBtn.style.pointerEvents = 'none';
-                        setTimeout(() => { copyBtn.innerHTML = originalIcon; copyBtn.style.pointerEvents = 'auto'; }, 2000);
-                    } catch (err) { console.error("Kopyalama başarısız:", err); }
-                };
+        const avatarColors = ["bg-orange-600", "bg-blue-600", "bg-purple-600", "bg-emerald-600", "bg-pink-600", "bg-indigo-600", "bg-amber-600"];
+        function getRandomAvatarColor() { return avatarColors[Math.floor(Math.random() * avatarColors.length)]; }
+
+        const videoGrid = document.getElementById('video-grid');
+        const localVideo = document.getElementById('localVideo');
+        const screenVideo = document.getElementById('screenVideo');
+        const screenShareView = document.getElementById('screen-share-view');
+        const whiteboardCanvas = document.getElementById('whiteboard');
+        const boardCtx = whiteboardCanvas.getContext('2d', { willReadFrequently: true });
+        const toggleScreenVisibilityBtn = document.getElementById('toggle-screen-visibility-btn');
+        const globalRecordingNotice = document.getElementById('global-recording-notice');
+        
+        let localStream, screenStream, p2pChannel, realTimeDBChannel;
+        let peerConnections = {}; let screenPCs = {}; let iceQueues = {};        
+        let userName = "Anonim"; let currentRoomId = ""; let isScreenSharing = false;
+        let isDrawing = false; let currentTool = 'pen'; let currentColor = '#1e293b'; let startX = 0, startY = 0; let wbSnapshot = null;
+        let isHandRaised = false; 
+        
+        let mediaRecorder = null; let recordedChunks = []; let combinedAudioStream = null;
+        
+        let dbWhiteboardHistory = []; let wbSaveBuffer = [];
+        let isMicMuted = false; let isCamOff = false; let isScreenHiddenByMe = false;
+        let lastUserCount = 0;
+
+        const bgImages = {
+            cyber: 'https://images.unsplash.com/photo-1542831371-29b0f74f9713?w=1000&auto=format&fit=crop',
+            home: 'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=1000&auto=format&fit=crop',
+            park: 'https://images.unsplash.com/photo-1519331379826-f10be5486c6f?w=1000&auto=format&fit=crop'
+        };
+
+        function forceHDAudioSDP(sdp) {
+            if (sdp.indexOf('useinbandfec=1') !== -1) {
+                return sdp.replace('useinbandfec=1', 'useinbandfec=1;maxaveragebitrate=128000;stereo=1;sprop-stereo=1');
+            }
+            return sdp;
+        }
+
+        // =========================================================================
+        // GELİŞMİŞ SYNTH-AUDIO SES EFEKTLERİ VE AMBİYANS MÜZİK MOTORU
+        // =========================================================================
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        let backgroundMusicNode = null;
+        let backgroundMusicGain = null;
+
+        function playSoundEffect(type) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            
+            const osc1 = audioCtx.createOscillator();
+            const osc2 = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            
+            osc1.connect(gainNode);
+            osc2.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            
+            const now = audioCtx.currentTime;
+
+            if (type === 'join') { // Katılma Sesi (Yukarı doğru tırmanan tonlar)
+                osc1.type = 'sine'; osc1.frequency.setValueAtTime(300, now);
+                osc1.frequency.exponentialRampToValueAtTime(600, now + 0.3);
+                gainNode.gain.setValueAtTime(0.2, now); gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+                osc1.start(now); osc1.stop(now + 0.3);
+            } 
+            else if (type === 'leave') { // Ayrılma Sesi (Aşağı doğru düşen tonlar)
+                osc1.type = 'sine'; osc1.frequency.setValueAtTime(550, now);
+                osc1.frequency.exponentialRampToValueAtTime(250, now + 0.35);
+                gainNode.gain.setValueAtTime(0.2, now); gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+                osc1.start(now); osc1.stop(now + 0.35);
+            } 
+            else if (type === 'share-toggle') { // Ekran Paylaşma Sesi (Akustik tıklama ve parlama)
+                osc1.type = 'triangle'; osc1.frequency.setValueAtTime(440, now);
+                osc1.frequency.setValueAtTime(880, now + 0.08);
+                gainNode.gain.setValueAtTime(0.2, now); gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+                osc1.start(now); osc1.stop(now + 0.2);
+            } 
+            else if (type === 'copy-success') { // Yeşil Tik Sesi (Kısa iki tık ritmi)
+                osc1.type = 'sine'; osc1.frequency.setValueAtTime(600, now);
+                osc1.frequency.setValueAtTime(1200, now + 0.05);
+                gainNode.gain.setValueAtTime(0.15, now); gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+                osc1.start(now); osc1.stop(now + 0.15);
+            }
+            else if (type === 'record-start') { // Kayıt Başlama (Hızlı kesik sinyal)
+                osc1.type = 'square'; osc1.frequency.setValueAtTime(800, now);
+                gainNode.gain.setValueAtTime(0.1, now); gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+                osc1.start(now); osc1.stop(now + 0.1);
+            }
+            else if (type === 'record-pause') { // Kayıt Duraklama
+                osc1.type = 'sine'; osc1.frequency.setValueAtTime(400, now);
+                gainNode.gain.setValueAtTime(0.15, now); gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+                osc1.start(now); osc1.stop(now + 0.15);
+            }
+            else if (type === 'record-resume') { // Kayıt Devam Etme
+                osc1.type = 'sine'; osc1.frequency.setValueAtTime(400, now);
+                osc1.frequency.setValueAtTime(700, now + 0.08);
+                gainNode.gain.setValueAtTime(0.15, now); gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+                osc1.start(now); osc1.stop(now + 0.15);
+            }
+            else if (type === 'raise-hand') {
+                osc1.type = 'sine'; osc2.type = 'triangle';
+                osc1.frequency.setValueAtTime(180, now); osc2.frequency.setValueAtTime(185, now);
+                gainNode.gain.setValueAtTime(0.3, now); gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+                osc1.start(now); osc2.start(now); osc1.stop(now + 0.4); osc2.stop(now + 0.4);
+            }
+        }
+
+        // Dinamik Minimalist Lo-Fi/Meditasyon Melodi Üreteci (Arka Plan Müziği)
+        function startProceduralAmbientMusic() {
+            if (backgroundMusicNode) return; 
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+
+            backgroundMusicGain = audioCtx.createGain();
+            backgroundMusicGain.gain.setValueAtTime(0.04, audioCtx.currentTime); // Çok kısık, rahatsız etmeyen seviye
+            backgroundMusicGain.connect(audioCtx.destination);
+
+            let isPlaying = true;
+            const notes = [261.63, 293.66, 329.63, 392.00, 440.00]; // Pentatonik dinlendirici dizi (C4, D4, E4, G4, A4)
+
+            function playNextNote() {
+                if (!isPlaying) return;
+                const now = audioCtx.currentTime;
+                const osc = audioCtx.createOscillator();
+                const noteGain = audioCtx.createGain();
+                
+                osc.type = 'sine';
+                const randomNote = notes[Math.floor(Math.random() * notes.length)];
+                osc.frequency.setValueAtTime(randomNote, now);
+                
+                // Yumuşak atak ve sönümlenme süresi (Sakin bir çan efekti gibi)
+                noteGain.gain.setValueAtTime(0, now);
+                noteGain.gain.linearRampToValueAtTime(0.4, now + 1.5);
+                noteGain.gain.exponentialRampToValueAtTime(0.001, now + 4.0);
+                
+                osc.connect(noteGain);
+                noteGain.connect(backgroundMusicGain);
+                
+                osc.start(now);
+                osc.stop(now + 4.0);
+                
+                setTimeout(playNextNote, 3000 + Math.random() * 2000);
             }
 
-            // =========================================================================
-            // 2. ARKA PLAN DEĞİŞTİRME MODAL VE ARAYÜZÜNÜN OLUŞTURULMASI
-            // =========================================================================
-            const moreMenu = document.getElementById('more-options-menu');
+            backgroundMusicNode = { stop: () => { isPlaying = false; } };
+            playNextNote();
+        }
+
+        function stopProceduralAmbientMusic() {
+            if (backgroundMusicNode) {
+                backgroundMusicNode.stop();
+                backgroundMusicNode = null;
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const roomParam = urlParams.get('room');
+            if (roomParam) document.getElementById('room-input').value = decodeURIComponent(roomParam);
+
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: { echoCancellation: true, noiseSuppression: true } });
+                localVideo.srcObject = localStream;
+                setupWhiteboardEngine();
+            } catch (e) { console.error("Cihaz izin hatası:", e); }
+        });
+
+        document.getElementById('join-btn').onclick = () => {
+            const rId = document.getElementById('room-input').value.trim();
+            const uName = document.getElementById('username-input').value.trim();
+            if(!rId || !uName) return alert("Bilgileri doldurun.");
+            userName = uName; currentRoomId = rId;
+            
+            const localAvatar = document.getElementById('local-avatar');
+            localAvatar.innerText = userName.charAt(0).toUpperCase();
+            localAvatar.className = `avatar-placeholder hidden text-5xl ${getRandomAvatarColor()}`;
+
+            document.getElementById('local-name-tag').innerText = userName + " (Siz)";
+            document.getElementById('current-room-text').innerText = rId;
+            
+            document.getElementById('lobby-screen').classList.add('hidden');
+            document.getElementById('main-header').classList.remove('hidden');
+            document.getElementById('main-header').classList.add('flex');
+            document.getElementById('main-footer').classList.remove('hidden');
+            document.getElementById('main-footer').classList.add('flex');
+
+            initSupabaseMeshNetwork(rId);
+            initSupabaseRealTimeDatabase(rId);
+            loadRoomDataFromDatabase(rId);
+            setInterval(flushWhiteboardBuffer, 400);
+        };
+
+        function initSupabaseRealTimeDatabase(roomCode) {
+            realTimeDBChannel = supabaseClient.channel('realtime_db_changes');
+            realTimeDBChannel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'talk_chat', filter: `room_id=eq.${roomCode}` }, (payload) => {
+                if (payload.new.sender !== userName) renderChatMessage(payload.new.sender, payload.new.text, false);
+            });
+            realTimeDBChannel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'talk_whiteboard', filter: `room_id=eq.${roomCode}` }, (payload) => {
+                const stroke = payload.new;
+                if (!stroke.sender || stroke.sender !== myClientId) { dbWhiteboardHistory.push(stroke); remoteDrawAction(stroke); }
+            });
+            realTimeDBChannel.on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'talk_whiteboard', filter: `room_id=eq.${roomCode}` }, () => {
+                dbWhiteboardHistory = []; wbSaveBuffer = []; boardCtx.clearRect(0, 0, whiteboardCanvas.width, whiteboardCanvas.height);
+            });
+            realTimeDBChannel.subscribe();
+        }
+
+        async function loadRoomDataFromDatabase(roomCode) {
+            try {
+                const { data: chatData } = await supabaseClient.from('talk_chat').select('*').eq('room_id', roomCode).order('created_at', { ascending: true });
+                if (chatData) { document.getElementById('chat-messages').innerHTML = ""; chatData.forEach(msg => renderChatMessage(msg.sender, msg.text, msg.sender === userName)); }
+                const { data: wbData } = await supabaseClient.from('talk_whiteboard').select('*').eq('room_id', roomCode).order('created_at', { ascending: true });
+                if (wbData) { dbWhiteboardHistory = wbData; redrawWhiteboardFromHistory(); }
+            } catch (err) { console.log(err); }
+        }
+
+        function initSupabaseMeshNetwork(roomCode) {
+            p2pChannel = supabaseClient.channel(`mailmaster_mega_${roomCode}`, { config: { presence: { key: myClientId } } });
+            p2pChannel
+                .on('presence', { event: 'sync' }, () => handlePresenceSync(p2pChannel.presenceState()))
+                .on('broadcast', { event: 'signal' }, ({ payload }) => { if (payload.targetId === myClientId) handleInboundSignal(payload); })
+                .on('broadcast', { event: 'emoji' }, ({ payload }) => showEmojiAnimation(payload.emoji))
+                .on('broadcast', { event: 'hand-toggle' }, ({ payload }) => {
+                    const targetBadge = document.getElementById(`hand_badge_${payload.userId}`);
+                    if (targetBadge) { payload.isHandRaised ? targetBadge.classList.remove('hidden') : targetBadge.classList.add('hidden'); }
+                })
+                .on('broadcast', { event: 'mic-toggle' }, ({ payload }) => {
+                    const icon = document.getElementById(`mic_icon_${payload.userId}`);
+                    if (icon) icon.className = payload.isMuted ? "fa-solid fa-microphone-slash text-red-500 mr-2" : "fa-solid fa-microphone text-emerald-400 mr-2";
+                })
+                .on('broadcast', { event: 'cam-toggle' }, ({ payload }) => {
+                    const targetVideo = document.getElementById(`video_${payload.userId}_cam`);
+                    const targetAvatar = document.getElementById(`avatar_${payload.userId}`);
+                    if (payload.isCamOff) {
+                        if(targetVideo) targetVideo.classList.add('hidden');
+                        if(targetAvatar) targetAvatar.classList.remove('hidden');
+                    } else {
+                        if(targetVideo) targetVideo.classList.remove('hidden');
+                        if(targetAvatar) targetAvatar.classList.add('hidden');
+                    }
+                })
+                .on('broadcast', { event: 'screen-offer' }, () => {
+                    if(!isScreenHiddenByMe) {
+                        screenShareView.classList.remove('hidden');
+                        videoGrid.classList.add('screen-active');
+                    }
+                    toggleScreenVisibilityBtn.classList.remove('hidden');
+                })
+                .on('broadcast', { event: 'screen-stop' }, ({ payload }) => {
+                    if (screenPCs[payload.userId]) { screenPCs[payload.userId].close(); delete screenPCs[payload.userId]; }
+                    resetScreenShareUI();
+                })
+                .on('broadcast', { event: 'clear-board-signal' }, () => {
+                    dbWhiteboardHistory = []; wbSaveBuffer = []; boardCtx.clearRect(0, 0, whiteboardCanvas.width, whiteboardCanvas.height);
+                })
+                .on('broadcast', { event: 'recording-state-changed' }, ({ payload }) => {
+                    if(payload.action === 'start') playSoundEffect('record-start');
+                    if(payload.action === 'pause') playSoundEffect('record-pause');
+                    if(payload.action === 'resume') playSoundEffect('record-resume');
+
+                    if(payload.isRecording) { globalRecordingNotice.classList.remove('hidden'); } 
+                    else { globalRecordingNotice.classList.add('hidden'); }
+                })
+                .subscribe(async (status) => { 
+                    if (status === 'SUBSCRIBED') { 
+                        await p2pChannel.track({ name: userName, isSharingScreen: isScreenSharing }); 
+                    } 
+                });
+        }
+
+        // =========================================================================
+        // KİŞİ SAYISI DEĞİŞİMİNE GÖRE REAKTİF SES TETİKLEYİCİLERİ
+        // =========================================================================
+        function handlePresenceSync(state) {
+            const currentUsersCount = Object.keys(state).length;
+
+            if (lastUserCount !== 0) {
+                if (currentUsersCount > lastUserCount) {
+                    playSoundEffect('join'); // 1 Sayı Artarsa Giriş Sesi
+                } else if (currentUsersCount < lastUserCount) {
+                    playSoundEffect('leave'); // 1 Sayı Azalırsa Çıkış Sesi
+                }
+            }
+            lastUserCount = currentUsersCount;
+
+            Object.keys(peerConnections).forEach(id => { if (!state[id]) removeUserConnection(id); });
+            Object.keys(state).forEach(id => {
+                if (id === myClientId) return;
+                const remoteUserData = (state[id] && state[id][0]) ? state[id][0] : null;
+                const remoteName = remoteUserData ? remoteUserData.name : "Katılımcı";
+                
+                if (myClientId > id && !peerConnections[id]) {
+                    buildWebRTCLink(id, remoteName, true);
+                }
+
+                // Önceden ekran paylaşan varsa sonradan gelene akışı senkronize etme motoru
+                if (remoteUserData && remoteUserData.isSharingScreen && !screenPCs[id]) {
+                    triggerScreenNegotiationForNewJoiner(id);
+                }
+            });
+        }
+
+        function triggerScreenNegotiationForNewJoiner(remoteId) {
+            p2pChannel.send({
+                type: 'broadcast',
+                event: 'request-screen-resync',
+                payload: { requesterId: myClientId, targetId: remoteId }
+            });
+        }
+
+        async function handleInboundSignal(data) {
+            const rId = data.senderId;
+            switch (data.type) {
+                case 'offer':
+                    await buildWebRTCLink(rId, data.senderName, false);
+                    await peerConnections[rId].setRemoteDescription(new RTCSessionDescription(data.offer));
+                    if (iceQueues[rId]) { while(iceQueues[rId].length > 0) { await peerConnections[rId].addIceCandidate(iceQueues[rId].shift()); } }
+                    const answer = await peerConnections[rId].createAnswer(); answer.sdp = forceHDAudioSDP(answer.sdp);
+                    await peerConnections[rId].setLocalDescription(answer);
+                    sendSignalData({ type: 'answer', answer: answer, senderName: userName }, rId);
+                    break;
+                case 'answer':
+                    if (peerConnections[rId]) {
+                        await peerConnections[rId].setRemoteDescription(new RTCSessionDescription(data.answer));
+                        if (iceQueues[rId]) { while(iceQueues[rId].length > 0) { await peerConnections[rId].addIceCandidate(iceQueues[rId].shift()); } }
+                    }
+                    break;
+                case 'ice':
+                    if (peerConnections[rId] && peerConnections[rId].remoteDescription) {
+                        await peerConnections[rId].addIceCandidate(new RTCIceCandidate(data.candidate));
+                    } else {
+                        if (!iceQueues[rId]) iceQueues[rId] = [];
+                        iceQueues[rId].push(new RTCIceCandidate(data.candidate));
+                    }
+                    break;
+                case 'screen-offer':
+                    const spc = new RTCPeerConnection(rtcConfig);
+                    screenPCs[rId] = spc;
+                    spc.ontrack = ev => {
+                        screenVideo.srcObject = ev.streams[0];
+                        screenVideo.play().catch(e => console.log(e));
+                        if(!isScreenHiddenByMe) {
+                            screenShareView.classList.remove('hidden');
+                            videoGrid.classList.add('screen-active');
+                        }
+                        toggleScreenVisibilityBtn.classList.remove('hidden');
+                    };
+                    spc.onicecandidate = ev => {
+                        if (ev.candidate) sendSignalData({ type: 'screen-ice', candidate: ev.candidate }, rId);
+                    };
+                    await spc.setRemoteDescription(new RTCSessionDescription(data.offer));
+                    const sAnswer = await spc.createAnswer();
+                    await spc.setLocalDescription(sAnswer);
+                    sendSignalData({ type: 'screen-answer', answer: sAnswer }, rId);
+                    break;
+                case 'screen-answer':
+                    if (screenPCs[rId]) { await screenPCs[rId].setRemoteDescription(new RTCSessionDescription(data.answer)); }
+                    break;
+                case 'screen-ice':
+                    if(screenPCs[rId] && screenPCs[rId].remoteDescription) { await screenPCs[rId].addIceCandidate(new RTCIceCandidate(data.candidate)); }
+                    break;
+            }
+        }
+
+        supabaseClient.channel('screen_resync_watcher').on('broadcast', { event: 'request-screen-resync' }, async ({ payload }) => {
+            if (payload.targetId === myClientId && isScreenSharing && screenStream) {
+                const targetPeerId = payload.requesterId;
+                const spc = new RTCPeerConnection(rtcConfig);
+                screenPCs[targetPeerId] = spc;
+                screenStream.getTracks().forEach(track => spc.addTrack(track, screenStream));
+                spc.onicecandidate = ev => {
+                    if (ev.candidate) sendSignalData({ type: 'screen-ice', candidate: ev.candidate }, targetPeerId);
+                };
+                const offer = await spc.createOffer();
+                await spc.setLocalDescription(offer);
+                sendSignalData({ type: 'screen-offer', offer: offer }, targetPeerId);
+            }
+        }).subscribe();
+
+        async function buildWebRTCLink(remoteId, remoteName, isInitiator) {
+            if (peerConnections[remoteId]) return;
+            const pc = new RTCPeerConnection(rtcConfig);
+            peerConnections[remoteId] = pc;
+            if (localStream) { localStream.getTracks().forEach(track => pc.addTrack(track, localStream)); }
+            pc.onicecandidate = ev => { if (ev.candidate) sendSignalData({ type: 'ice', candidate: ev.candidate }, remoteId); };
+            pc.ontrack = ev => { if (ev.track.kind === 'video') createVideoCard(remoteId, remoteName, ev.streams[0]); };
+            if (isInitiator) {
+                const offer = await pc.createOffer(); offer.sdp = forceHDAudioSDP(offer.sdp);
+                await pc.setLocalDescription(offer);
+                sendSignalData({ type: 'offer', offer: offer, senderName: userName }, remoteId);
+            }
+        }
+
+        function sendSignalData(payload, targetId) {
+            p2pChannel.send({ type: 'broadcast', event: 'signal', payload: { ...payload, senderId: myClientId, targetId: targetId } });
+        }
+
+        function createVideoCard(id, rName, stream) {
+            if (document.getElementById(`wrapper_${id}`)) return;
+            const wrapper = document.createElement('div');
+            wrapper.className = 'video-wrapper'; wrapper.id = `wrapper_${id}`;
+            const firstLetter = rName.charAt(0).toUpperCase();
+            const randomBg = getRandomAvatarColor();
+            wrapper.innerHTML = `
+                <div id="avatar_${id}" class="avatar-placeholder hidden text-5xl ${randomBg}">${firstLetter}</div>
+                <video id="video_${id}_cam" autoplay playsinline></video>
+                <div class="user-tag">
+                    <span id="hand_badge_${id}" class="hidden text-amber-400 font-bold mr-2 animate-bounce">✋</span>
+                    <i id="mic_icon_${id}" class="fa-solid fa-microphone text-emerald-400 mr-2"></i> 
+                    <span>${rName}</span>
+                </div>`;
+            videoGrid.appendChild(wrapper);
+            document.getElementById(`video_${id}_cam`).srcObject = stream;
+        }
+
+        function removeUserConnection(id) {
+            if (document.getElementById(`wrapper_${id}`)) document.getElementById(`wrapper_${id}`).remove();
+            if (peerConnections[id]) { peerConnections[id].close(); delete peerConnections[id]; }
+            if (screenPCs[id]) { screenPCs[id].close(); delete screenPCs[id]; }
+        }
+
+        // =========================================================================
+        // EKRAN PAYLAŞIMI VE SESİ (AKTİF VE ONARILDI)
+        // =========================================================================
+        document.getElementById('share-screen').onclick = async () => {
+            playSoundEffect('share-toggle'); // Ekran paylaşımına basılınca çalan ses
+            if (!isScreenSharing) {
+                try {
+                    screenStream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 30, width: 1920, height: 1080 } });
+                    screenVideo.srcObject = screenStream;
+                    screenVideo.play();
+                    isScreenSharing = true;
+                    
+                    const screenBtn = document.getElementById('share-screen');
+                    screenBtn.className = "bg-sky-600 hover:bg-sky-700 text-white w-14 h-14 rounded-xl flex items-center justify-center border border-sky-500 text-2xl transition-all shadow-lg flex-shrink-0";
+                    
+                    if(!isScreenHiddenByMe) {
+                        screenShareView.classList.remove('hidden');
+                        videoGrid.classList.add('screen-active');
+                    }
+                    toggleScreenVisibilityBtn.classList.remove('hidden');
+
+                    p2pChannel.send({ type: 'broadcast', event: 'screen-offer', payload: {} });
+                    await p2pChannel.track({ name: userName, isSharingScreen: true });
+
+                    Object.keys(peerConnections).forEach(async (remoteId) => {
+                        const spc = new RTCPeerConnection(rtcConfig);
+                        screenPCs[remoteId] = spc;
+                        screenStream.getTracks().forEach(track => spc.addTrack(track, screenStream));
+                        spc.onicecandidate = ev => { if (ev.candidate) sendSignalData({ type: 'screen-ice', candidate: ev.candidate }, remoteId); };
+                        const offer = await spc.createOffer();
+                        await spc.setLocalDescription(offer);
+                        sendSignalData({ type: 'screen-offer', offer: offer }, remoteId);
+                    });
+
+                    screenStream.getVideoTracks()[0].onended = () => { stopMyScreenShare(); };
+                } catch (err) { console.error(err); }
+            } else { stopMyScreenShare(); }
+        };
+
+        async function stopMyScreenShare() {
+            if (!isScreenSharing) return;
+            isScreenSharing = false;
+            if (screenStream) { screenStream.getTracks().forEach(t => t.stop()); screenStream = null; }
+            const screenBtn = document.getElementById('share-screen');
+            screenBtn.className = "bg-slate-800 hover:bg-slate-700 w-14 h-14 rounded-xl flex items-center justify-center border border-slate-700 text-sky-400 text-2xl transition-all shadow-lg flex-shrink-0";
+            
+            p2pChannel.send({ type: 'broadcast', event: 'screen-stop', payload: { userId: myClientId } });
+            await p2pChannel.track({ name: userName, isSharingScreen: false });
+            Object.keys(screenPCs).forEach(id => { screenPCs[id].close(); delete screenPCs[id]; });
+            resetScreenShareUI();
+        }
+
+        function resetScreenShareUI() {
+            screenVideo.srcObject = null;
+            screenShareView.classList.add('hidden');
+            videoGrid.classList.remove('screen-active');
+            toggleScreenVisibilityBtn.classList.add('hidden');
+        }
+
+        toggleScreenVisibilityBtn.onclick = () => {
+            isScreenHiddenByMe = !isScreenHiddenByMe;
+            if (isScreenHiddenByMe) {
+                screenShareView.classList.add('hidden'); videoGrid.classList.remove('screen-active');
+                toggleScreenVisibilityBtn.innerHTML = `<i class="fa-solid fa-eye mr-2"></i> Ekranı Göster`;
+            } else {
+                screenShareView.classList.remove('hidden'); videoGrid.classList.add('screen-active');
+                toggleScreenVisibilityBtn.innerHTML = `<i class="fa-solid fa-eye-slash mr-2"></i> Ekranı Gizle`;
+            }
+        };
+
+        // =========================================================================
+        // MİKROFON, KAMERA VE SOHBET KONTROLLERİ
+        // =========================================================================
+        document.getElementById('toggle-mic').onclick = () => {
+            const track = localStream.getAudioTracks()[0];
+            if(track) {
+                isMicMuted = !isMicMuted; track.enabled = !isMicMuted;
+                const micBtn = document.getElementById('toggle-mic');
+                const localMicIcon = document.getElementById('local-mic-icon');
+                if (isMicMuted) {
+                    micBtn.className = "bg-red-600 hover:bg-red-700 text-white w-14 h-14 rounded-xl flex items-center justify-center border border-red-500 text-2xl transition-all shadow-lg flex-shrink-0";
+                    micBtn.innerHTML = `<i class="fa-solid fa-microphone-slash"></i>`;
+                    localMicIcon.className = "fa-solid fa-microphone-slash text-red-500 mr-2";
+                } else {
+                    micBtn.className = "bg-slate-800 hover:bg-slate-700 text-slate-200 w-14 h-14 rounded-xl flex items-center justify-center border border-slate-700 text-2xl transition-all shadow-lg flex-shrink-0";
+                    micBtn.innerHTML = `<i class="fa-solid fa-microphone"></i>`;
+                    localMicIcon.className = "fa-solid fa-microphone text-emerald-400 mr-2";
+                }
+                p2pChannel.send({ type: 'broadcast', event: 'mic-toggle', payload: { userId: myClientId, isMuted: isMicMuted } });
+            }
+        };
+
+        document.getElementById('toggle-cam').onclick = () => {
+            const track = localStream.getVideoTracks()[0];
+            if(track) {
+                isCamOff = !isCamOff; track.enabled = !isCamOff;
+                const camBtn = document.getElementById('toggle-cam');
+                const localAvatar = document.getElementById('local-avatar');
+                if (isCamOff) {
+                    camBtn.className = "bg-red-600 hover:bg-red-700 text-white w-14 h-14 rounded-xl flex items-center justify-center border border-red-500 text-2xl transition-all shadow-lg flex-shrink-0";
+                    camBtn.innerHTML = `<i class="fa-solid fa-video-slash"></i>`;
+                    localVideo.classList.add('hidden'); localAvatar.classList.remove('hidden');
+                } else {
+                    camBtn.className = "bg-slate-800 hover:bg-slate-700 text-slate-200 w-14 h-14 rounded-xl flex items-center justify-center border border-slate-700 text-2xl transition-all shadow-lg flex-shrink-0";
+                    camBtn.innerHTML = `<i class="fa-solid fa-video"></i>`;
+                    localVideo.classList.remove('hidden'); localAvatar.classList.add('hidden');
+                }
+                p2pChannel.send({ type: 'broadcast', event: 'cam-toggle', payload: { userId: myClientId, isCamOff: isCamOff } });
+            }
+        };
+
+        document.getElementById('toggle-hand').onclick = function() {
+            playSoundEffect('raise-hand'); isHandRaised = !isHandRaised;
+            const handBtn = document.getElementById('toggle-hand');
+            const localHandTag = document.getElementById('local-hand-tag');
+            if (isHandRaised) {
+                handBtn.className = "bg-amber-500 hover:bg-amber-600 text-white w-14 h-14 rounded-xl flex items-center justify-center border border-amber-400 text-2xl transition-all shadow-lg flex-shrink-0";
+                localHandTag.classList.remove('hidden');
+            } else {
+                handBtn.className = "bg-slate-800 hover:bg-slate-700 text-slate-200 w-14 h-14 rounded-xl flex items-center justify-center border border-slate-700 text-2xl transition-all shadow-lg flex-shrink-0";
+                localHandTag.classList.add('hidden');
+            }
+            p2pChannel.send({ type: 'broadcast', event: 'hand-toggle', payload: { userId: myClientId, isHandRaised: isHandRaised } });
+        };
+
+        document.getElementById('send-chat-btn').onclick = sendNewMessage;
+        document.getElementById('chat-input').onkeydown = e => { if (e.key === 'Enter') sendNewMessage(); };
+
+        async function sendNewMessage() {
+            const input = document.getElementById('chat-input'); const txt = input.value.trim();
+            if (!txt || !currentRoomId) return;
+            input.value = ""; renderChatMessage(userName, txt, true);
+            try { await supabaseClient.from('talk_chat').insert([{ room_id: currentRoomId, sender: userName, text: txt }]); } catch(e){}
+        }
+
+        function renderChatMessage(sender, text, isMe) {
+            const container = document.getElementById('chat-messages'); const item = document.createElement('div');
+            item.className = `p-3 rounded-xl max-w-[85%] ${isMe ? 'bg-emerald-600/20 text-emerald-200 ml-auto border border-emerald-500/20' : 'bg-slate-950 text-slate-200 mr-auto border border-slate-800'}`;
+            item.innerHTML = `<div class="text-[10px] font-black uppercase text-slate-400 mb-0.5">${sender}</div><div class="break-words leading-relaxed font-medium">${text}</div>`;
+            container.appendChild(item); container.scrollTop = container.scrollHeight;
+        }
+
+        window.sendReaction = (emoji) => {
+            p2pChannel.send({ type: 'broadcast', event: 'emoji', payload: { emoji: emoji } });
+            showEmojiAnimation(emoji);
+        };
+
+        function showEmojiAnimation(emoji) {
+            const el = document.createElement('div'); el.className = 'neon-emoji'; el.innerText = emoji;
+            el.style.left = (Math.random() * 60 + 20) + "vw"; document.body.appendChild(el);
+            setTimeout(() => el.remove(), 2500);
+        }
+
+        document.getElementById('hangup-btn').onclick = () => { 
+            playSoundEffect('leave');
+            setTimeout(() => { if (confirm("Toplantıdan ayrılmak istiyor musunuz?")) window.location.reload(); }, 100);
+        };
+
+        // =========================================================================
+        // ODA LİNKİ KOPYALAMA VE YEŞİL TİK / SES REAKSİYONU
+        // =========================================================================
+        const copyBtn = document.getElementById('copy-room-link-btn');
+        if (copyBtn) {
+            copyBtn.onclick = async function(e) {
+                e.preventDefault(); e.stopPropagation();
+                const roomTextEl = document.getElementById('current-room-text');
+                if (!roomTextEl) return;
+                const roomCode = roomTextEl.innerText.trim();
+                const currentUrl = window.location.origin + window.location.pathname + "?room=" + encodeURIComponent(roomCode);
+                try {
+                    await navigator.clipboard.writeText(currentUrl);
+                    playSoundEffect('copy-success'); // Yeşil tike basılınca ve kopyalanınca çalan ses
+                    const originalIcon = copyBtn.innerHTML;
+                    copyBtn.innerHTML = `<i class="fa-solid fa-check text-emerald-400 animate-bounce"></i>`;
+                    copyBtn.style.pointerEvents = 'none';
+                    setTimeout(() => { copyBtn.innerHTML = originalIcon; copyBtn.style.pointerEvents = 'auto'; }, 2000);
+                } catch (err) { console.error("Kopyalama başarısız:", err); }
+            };
+        }
+
+        // =========================================================================
+        // DİNAMİK MENÜLER: ARKA PLAN MODALİ VE SES AYARLARI PANELİ ENTEGRASYONU
+        // =========================================================================
+        const filterSelect = document.getElementById('video-filter-select');
+        const moreMenuToggle = document.getElementById('more-options-toggle');
+        const moreMenu = document.getElementById('more-options-menu');
+        
+        if (moreMenuToggle && moreMenu) {
+            moreMenuToggle.onclick = function(e) {
+                e.stopPropagation();
+                const isHidden = moreMenu.classList.contains('opacity-0');
+                if (isHidden) { moreMenu.classList.remove('scale-90', 'opacity-0', 'pointer-events-none'); } 
+                else { moreMenu.classList.add('scale-90', 'opacity-0', 'pointer-events-none'); }
+            };
+            document.addEventListener('click', () => { moreMenu.classList.add('scale-90', 'opacity-0', 'pointer-events-none'); });
+        }
+
+        function createUiElements() {
+            // Arka Plan Butonu Ekleme
             if (moreMenu && !document.getElementById('open-bg-modal-btn')) {
                 const bgBtn = document.createElement('button');
                 bgBtn.id = 'open-bg-modal-btn';
                 bgBtn.className = 'w-full text-left bg-slate-950/80 hover:bg-slate-800 text-sky-400 text-sm font-bold p-3.5 rounded-xl flex items-center gap-3 border border-sky-500/10 transition-all mt-1';
                 bgBtn.innerHTML = `<i class="fa-solid fa-images text-xs"></i> Arka Planı Değiştir`;
                 moreMenu.appendChild(bgBtn);
+
+                bgBtn.onclick = function(e) {
+                    e.stopPropagation();
+                    document.getElementById('bg-transform-modal').classList.remove('hidden');
+                    moreMenu.classList.add('scale-90', 'opacity-0', 'pointer-events-none');
+                };
             }
 
-            const modal = document.createElement('div');
-            modal.id = 'bg-transform-modal';
-            modal.className = 'fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[999999] hidden flex items-center justify-center p-4';
-            modal.innerHTML = `
-                <div class="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-2xl p-6 relative shadow-2xl">
-                    <button id="close-bg-modal-btn" class="absolute top-4 right-4 text-slate-400 hover:text-white text-xl w-8 h-8 flex items-center justify-center bg-slate-950 rounded-full border border-slate-800 transition-all">
-                        <i class="fa-solid fa-times"></i>
-                    </button>
-                    <h3 class="text-lg font-black text-slate-100 mb-1 flex items-center gap-2">
-                        <i class="fa-solid fa-wand-magic-sparkles text-emerald-400"></i> AI Arka Plan Değiştirici
-                    </h3>
-                    <p class="text-xs text-slate-400 mb-5">Yapay zeka sizi algılar ve sadece arkadaki manzarayı değiştirir.</p>
-                    
-                    <div class="grid grid-cols-2 gap-3 max-h-[320px] overflow-y-auto pr-1">
-                        <button class="bg-slate-950 border-2 border-emerald-500 p-4 rounded-xl text-sm font-bold flex flex-col items-center gap-2 transition-all" data-bg="none">
-                            <i class="fa-solid fa-video text-xl text-slate-400"></i> Efekt Yok
-                        </button>
-                        <button class="bg-slate-950 border-2 border-slate-800 p-4 rounded-xl text-sm font-bold flex flex-col items-center gap-2 transition-all" data-bg="blur">
-                            <i class="fa-solid fa-eye-slash text-xl text-sky-400"></i> Arka Planı Bulanıklaştır
-                        </button>
-                        <button class="bg-slate-950 border-2 border-slate-800 p-4 rounded-xl text-sm font-bold flex flex-col items-center gap-2 transition-all" data-bg="cyber">
-                            <i class="fa-solid fa-user-astronaut text-xl text-purple-400"></i> Cyber Space
-                        </button>
-                        <button class="bg-slate-950 border-2 border-slate-800 p-4 rounded-xl text-sm font-bold flex flex-col items-center gap-2 transition-all" data-bg="home">
-                            <i class="fa-solid fa-house text-xl text-amber-400"></i> Normal Ev
-                        </button>
-                        <button class="bg-slate-950 border-2 border-slate-800 p-4 rounded-xl text-sm font-bold flex flex-col items-center gap-2 transition-all" data-bg="park">
-                            <i class="fa-solid fa-tree text-xl text-green-400"></i> Yeşil Park
-                        </button>
-                        <label class="bg-slate-950 border-2 border-dashed border-slate-700 p-4 rounded-xl text-sm font-bold flex flex-col items-center justify-center gap-2 hover:border-emerald-500 transition-all cursor-pointer text-center">
-                            <i class="fa-solid fa-cloud-arrow-up text-xl text-slate-400"></i>
-                            <span>Fotoğraf Yükle</span>
-                            <input type="file" id="bg-custom-file" accept="image/*" class="hidden">
-                        </label>
-                    </div>
-                </div>
-            `;
-            document.body.appendChild(modal);
+            // SES AYARLARI (AMBİYANS MÜZİK) BUTONU EKLEME
+            if (moreMenu && !document.getElementById('open-audio-settings-btn')) {
+                const audioBtn = document.createElement('button');
+                audioBtn.id = 'open-audio-settings-btn';
+                audioBtn.className = 'w-full text-left bg-slate-950/80 hover:bg-slate-800 text-emerald-400 text-sm font-bold p-3.5 rounded-xl flex items-center gap-3 border border-emerald-500/10 transition-all mt-1';
+                audioBtn.innerHTML = `<i class="fa-solid fa-sliders text-xs"></i> Ses Ayarları (Müzik)`;
+                moreMenu.appendChild(audioBtn);
 
-            document.getElementById('open-bg-modal-btn').onclick = function(e) {
-                e.stopPropagation(); modal.classList.remove('hidden');
-                const m = document.getElementById('more-options-menu'); if (m) m.classList.add('scale-90', 'opacity-0', 'pointer-events-none');
-            };
-            document.getElementById('close-bg-modal-btn').onclick = function() { modal.classList.add('hidden'); };
-
-            // =========================================================================
-            // 3. YAPAY ZEKA GÖVDE SEGMENTASYONU VE ARKA PLAN İŞLEME MOTORU
-            // =========================================================================
-            const localVideo = document.getElementById('localVideo');
-            let currentEffect = 'none';
-            let bgImageObj = new Image();
-            bgImageObj.crossOrigin = "anonymous";
-
-            // Hazır görsellerin base64 formatları (Link kırılma veya CORS hatasını tamamen önlemek için)
-            const bgPresets = {
-                cyber: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360"><rect width="100%" height="100%" fill="%23090514"/><path d="M0 180h640M320 0v360M160 0l320 360M480 0L160 360" stroke="%233b82f6" stroke-width="1" opacity="0.3"/><circle cx="320" cy="180" r="100" stroke="%23a855f7" stroke-width="2" fill="none" opacity="0.5"/></svg>',
-                home: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360"><rect width="100%" height="100%" fill="%231e1b4b"/><rect x="80" y="60" width="160" height="200" fill="%23312e81" rx="8"/><line x1="0" y1="280" x2="640" y2="280" stroke="%234338ca" stroke-width="4"/></svg>',
-                park: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360"><rect width="100%" height="100%" fill="%23064e3b"/><circle cx="120" cy="400" r="250" fill="%23047857"/><circle cx="520" cy="420" r="200" fill="%23059669"/></svg>'
-            };
-
-            // Gizli işleme tuvali (Canvas) oluşturup video akışını buna yönlendiriyoruz
-            const outputCanvas = document.createElement('canvas');
-            outputCanvas.id = 'ai-processed-canvas';
-            outputCanvas.className = 'local-mirror filter-none absolute inset-0 w-full h-full object-cover z-10';
-            const ctx = outputCanvas.getContext('2d');
-            
-            // Gerçek yerel video elementini gizleyip yerine canvası yerleştiriyoruz
-            localVideo.style.opacity = '0';
-            localVideo.parentElement.appendChild(outputCanvas);
-
-            // MediaPipe Yapay Zeka Modelini Kurma
-            const selfieSegmentation = new SelfieSegmentation({
-                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`
-            });
-
-            selfieSegmentation.setOptions({ modelSelection: 1 }); // 1: Genel model, kararlı ve performanslı
-
-            selfieSegmentation.onResults((results) => {
-                if (outputCanvas.width !== localVideo.videoWidth) {
-                    outputCanvas.width = localVideo.videoWidth || 640;
-                    outputCanvas.height = localVideo.videoHeight || 360;
-                }
-
-                ctx.clearRect(0, 0, outputCanvas.width, outputCanvas.height);
-                ctx.save();
-
-                // Eğer efekt "none" ise sadece doğrudan kamerayı çiz, yapay zekayı yorma
-                if (currentEffect === 'none') {
-                    ctx.drawImage(results.image, 0, 0, outputCanvas.width, outputCanvas.height);
-                    ctx.restore();
-                    return;
-                }
-
-                // 1. ADIM: Maskeyi çiz (Yapay zekanın insanı seçtiği alan)
-                ctx.drawImage(results.segmentationMask, 0, 0, outputCanvas.width, outputCanvas.height);
-
-                // 2. ADIM: İnsanın dışındaki alanı (Arka Planı) belirle ve oraya efekti uygula
-                ctx.globalCompositeOperation = 'source-out';
-                if (currentEffect === 'blur') {
-                    // Kamera görüntüsünü arka plana kopyala ve bulanıklaştır
-                    ctx.filter = 'blur(16px)';
-                    ctx.drawImage(results.image, 0, 0, outputCanvas.width, outputCanvas.height);
-                    ctx.filter = 'none';
-                } else if (bgImageObj.src) {
-                    // Seçilen veya yüklenen arka plan görselini yerleştir
-                    ctx.drawImage(bgImageObj, 0, 0, outputCanvas.width, outputCanvas.height);
-                }
-
-                // 3. ADIM: İnsanı (Özneyi) kesilen maskenin içine pürüzsüzce yerleştir
-                ctx.globalCompositeOperation = 'destination-over';
-                ctx.drawImage(results.image, 0, 0, outputCanvas.width, outputCanvas.height);
-
-                ctx.restore();
-            });
-
-            // Gerçek zamanlı kare yakalama döngüsü
-            async function updateAIFrame() {
-                if (localVideo.readyState >= 2 && !localVideo.paused) {
-                    await selfieSegmentation.send({ image: localVideo });
-                }
-                requestAnimationFrame(updateAIFrame);
+                audioBtn.onclick = function(e) {
+                    e.stopPropagation();
+                    document.getElementById('audio-settings-modal').classList.remove('hidden');
+                    moreMenu.classList.add('scale-90', 'opacity-0', 'pointer-events-none');
+                };
             }
-            localVideo.addEventListener('play', () => { updateAIFrame(); });
 
-            // Kullanıcı seçim olayları
-            modal.querySelectorAll('[data-bg]').forEach(btn => {
-                btn.onclick = function() {
-                    modal.querySelectorAll('[data-bg]').forEach(b => b.classList.remove('border-emerald-500'));
-                    btn.classList.add('border-emerald-500');
-                    
-                    currentEffect = btn.dataset.bg;
-                    if (bgPresets[currentEffect]) {
-                        bgImageObj.src = bgPresets[currentEffect];
+            // Arka Plan Seçim Modali Enjeksiyonu
+            if (!document.getElementById('bg-transform-modal')) {
+                const modal = document.createElement('div');
+                modal.id = 'bg-transform-modal';
+                modal.className = 'fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[999999] hidden flex items-center justify-center p-4';
+                modal.innerHTML = `
+                    <div class="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-2xl p-6 relative shadow-2xl" onclick="event.stopPropagation()">
+                        <button id="close-bg-modal-btn" class="absolute top-4 right-4 text-slate-400 hover:text-white text-xl w-8 h-8 flex items-center justify-center bg-slate-950 rounded-full border border-slate-800 transition-all">
+                            <i class="fa-solid fa-times"></i>
+                        </button>
+                        <h3 class="text-lg font-black text-slate-100 mb-1 flex items-center gap-2">
+                            <i class="fa-solid fa-wand-magic-sparkles text-emerald-400"></i> Akıllı Arka Plan Hafızası
+                        </h3>
+                        <p class="text-xs text-slate-400 mb-5">Arka planınızı değiştirin. Seçiminiz tarayıcıya otomatik kaydedilir.</p>
+                        <div id="bg-options-grid" class="grid grid-cols-2 gap-3 max-h-[320px] overflow-y-auto pr-1">
+                            <button class="bg-slate-950 border-2 border-slate-800 p-4 rounded-xl text-sm font-bold flex flex-col items-center gap-2 transition-all" data-bg="none">
+                                <i class="fa-solid fa-video text-xl text-slate-400"></i> Efekt Yok
+                            </button>
+                            <button class="bg-slate-950 border-2 border-slate-800 p-4 rounded-xl text-sm font-bold flex flex-col items-center gap-2 transition-all" data-bg="blur">
+                                <i class="fa-solid fa-eye-slash text-xl text-sky-400"></i> Arka Planı Bulanıklaştır
+                            </button>
+                            <button class="bg-slate-950 border-2 border-slate-800 p-4 rounded-xl text-sm font-bold flex flex-col items-center gap-2 transition-all" data-bg="cyber">
+                                <i class="fa-solid fa-user-astronaut text-xl text-purple-400"></i> Cyber Space
+                            </button>
+                            <button class="bg-slate-950 border-2 border-slate-800 p-4 rounded-xl text-sm font-bold flex flex-col items-center gap-2 transition-all" data-bg="home">
+                                <i class="fa-solid fa-house text-xl text-amber-400"></i> Normal Ev
+                            </button>
+                            <button class="bg-slate-950 border-2 border-slate-800 p-4 rounded-xl text-sm font-bold flex flex-col items-center gap-2 transition-all" data-bg="park">
+                                <i class="fa-solid fa-tree text-xl text-green-400"></i> Yeşil Park
+                            </button>
+                            <label id="upload-label-control" class="bg-slate-950 border-2 border-dashed border-slate-700 p-4 rounded-xl text-sm font-bold flex flex-col items-center justify-center gap-2 hover:border-emerald-500 transition-all cursor-pointer text-center">
+                                <i class="fa-solid fa-cloud-arrow-up text-xl text-slate-400"></i>
+                                <span>Kendi Fotoğrafını Yükle</span>
+                                <input type="file" id="bg-custom-file" accept="image/*" class="hidden">
+                            </label>
+                        </div>
+                    </div>`;
+                document.body.appendChild(modal);
+                document.getElementById('close-bg-modal-btn').onclick = () => modal.classList.add('hidden');
+                modal.onclick = () => modal.classList.add('hidden');
+            }
+
+            // SES AYARLARI MODALİ ENJEKSİYONU (Müzik Açma/Kapatma ve Volüm)
+            if (!document.getElementById('audio-settings-modal')) {
+                const audioModal = document.createElement('div');
+                audioModal.id = 'audio-settings-modal';
+                audioModal.className = 'fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[999999] hidden flex items-center justify-center p-4';
+                audioModal.innerHTML = `
+                    <div class="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-2xl p-6 relative shadow-2xl" onclick="event.stopPropagation()">
+                        <button id="close-audio-modal-btn" class="absolute top-4 right-4 text-slate-400 hover:text-white text-xl w-8 h-8 flex items-center justify-center bg-slate-950 rounded-full border border-slate-800 transition-all">
+                            <i class="fa-solid fa-times"></i>
+                        </button>
+                        <h3 class="text-md font-black text-slate-100 mb-1 flex items-center gap-2">
+                            <i class="fa-solid fa-music text-emerald-400"></i> Odaklanma & Ambiyans Müziği
+                        </h3>
+                        <p class="text-xs text-slate-400 mb-4">Görüşmelerde eylemler sırasında arkadan minimal, derinden gelen rahatlatıcı müzik açın.</p>
+                        
+                        <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 flex flex-col gap-3">
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs text-slate-300 font-bold">Arka Plan Müziği</span>
+                                <button id="music-toggle-trigger" class="bg-slate-800 text-slate-400 hover:text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all">KAPALI</button>
+                            </div>
+                            <div class="flex flex-col gap-1 mt-2">
+                                <span class="text-[11px] text-slate-400 flex justify-between">Müzik Seviyesi <span id="music-vol-txt">4%</span></span>
+                                <input type="range" id="music-volume-range" min="0" max="20" value="4" class="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-emerald-500">
+                            </div>
+                        </div>
+                    </div>`;
+                document.body.appendChild(audioModal);
+                document.getElementById('close-audio-modal-btn').onclick = () => audioModal.classList.add('hidden');
+                audioModal.onclick = () => audioModal.classList.add('hidden');
+
+                // Müzik Buton Dinamikleri
+                const musicBtn = document.getElementById('music-toggle-trigger');
+                const volSlider = document.getElementById('music-volume-range');
+                const volTxt = document.getElementById('music-vol-txt');
+                let ambientMusicActive = false;
+
+                musicBtn.onclick = () => {
+                    ambientMusicActive = !ambientMusicActive;
+                    if(ambientMusicActive) {
+                        startProceduralAmbientMusic();
+                        musicBtn.innerText = "AÇIK";
+                        musicBtn.className = "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-3 py-1.5 rounded-lg text-xs font-bold transition-all";
+                    } else {
+                        stopProceduralAmbientMusic();
+                        musicBtn.innerText = "KAPALI";
+                        musicBtn.className = "bg-slate-800 text-slate-400 px-3 py-1.5 rounded-lg text-xs font-bold transition-all";
                     }
                 };
-            });
 
-            // Kendi fotoğrafını yükleme işleyicisi
-            const fileInput = document.getElementById('bg-custom-file');
-            if (fileInput) {
-                fileInput.onchange = function(e) {
-                    const file = e.target.files[0];
-                    if (!file) return;
-                    const reader = new FileReader();
-                    reader.onload = function(event) {
-                        currentEffect = 'custom';
-                        bgImageObj.src = event.target.result;
-                        modal.querySelectorAll('[data-bg]').forEach(b => b.classList.remove('border-emerald-500'));
+                volSlider.oninput = (e) => {
+                    const v = e.target.value;
+                    volTxt.innerText = v + "%";
+                    if(backgroundMusicGain) {
+                        backgroundMusicGain.gain.setValueAtTime(v / 100, audioCtx.currentTime);
+                    }
+                };
+            }
+        }
+
+        function refreshCustomBackgroundsUI() {
+            const grid = document.getElementById('bg-options-grid'); const uploadControl = document.getElementById('upload-label-control');
+            if (!grid || !uploadControl || !filterSelect) return;
+
+            grid.querySelectorAll('.dynamic-custom-bg').forEach(el => el.remove());
+            filterSelect.querySelectorAll('.dynamic-custom-bg-opt').forEach(opt => opt.remove());
+
+            let count = 1;
+            for (let i = 1; i <= 5; i++) {
+                const savedImg = localStorage.getItem(`saved_bg_custom_src_${i}`);
+                if (savedImg) {
+                    const newBtn = document.createElement('button');
+                    newBtn.className = 'dynamic-custom-bg bg-slate-950 border-2 border-slate-800 p-4 rounded-xl text-sm font-bold flex flex-col items-center gap-2 transition-all cursor-pointer';
+                    newBtn.setAttribute('data-bg', `custom_${i}`);
+                    newBtn.innerHTML = `
+                        <div class="w-8 h-8 rounded-md bg-cover bg-center border border-slate-700" style="background-image: url('${savedImg}')"></div>
+                        <span class="text-emerald-400">Arka Plan ${count}</span>`;
+                    
+                    newBtn.onclick = function(e) { e.stopPropagation(); syncSelection(`custom_${i}`); };
+                    grid.insertBefore(newBtn, uploadControl);
+
+                    const option = document.createElement('option'); option.value = `custom_${i}`;
+                    option.className = 'dynamic-custom-bg-opt text-slate-900 bg-white'; option.textContent = `Arka Plan ${count}`;
+                    filterSelect.appendChild(option);
+                    count++;
+                }
+            }
+        }
+
+        function syncSelection(value) {
+            localStorage.setItem('saved_bg_type', value);
+            if (filterSelect) filterSelect.value = value;
+            const modal = document.getElementById('bg-transform-modal');
+            if (modal) {
+                modal.querySelectorAll('[data-bg]').forEach(b => b.classList.remove('border-emerald-500'));
+                const activeBtn = modal.querySelector(`[data-bg="${value}"]`);
+                if (activeBtn) activeBtn.classList.add('border-emerald-500');
+            }
+            applyIntegratedFilterAndBG(value);
+        }
+
+        function applyIntegratedFilterAndBG(value) {
+            if (!localVideo) return;
+            const parent = localVideo.parentElement; let bgWrapper = parent.querySelector('.bg-effect-wrapper');
+
+            if (!bgWrapper) {
+                bgWrapper = document.createElement('div');
+                bgWrapper.className = 'bg-effect-wrapper absolute inset-0 w-full h-full pointer-events-none z-30 bg-cover bg-center';
+                parent.style.position = 'relative'; parent.appendChild(bgWrapper);
+            }
+
+            localVideo.style.filter = 'none'; localVideo.style.webkitMaskImage = 'none'; localVideo.style.maskImage = 'none';
+            bgWrapper.style.backgroundImage = 'none'; bgWrapper.style.backdropFilter = 'none'; bgWrapper.style.webkitBackdropFilter = 'none';
+
+            if (value === 'none' || !value) { bgWrapper.remove(); } 
+            else if (value === 'sepia') { bgWrapper.remove(); localVideo.style.filter = 'sepia(85%) saturate(1.2)'; } 
+            else if (value === 'noir') { bgWrapper.remove(); localVideo.style.filter = 'grayscale(100%) contrast(1.3)'; } 
+            else if (value === 'cyber') { bgWrapper.remove(); localVideo.style.filter = 'hue-rotate(85deg) saturate(2.5) contrast(1.1)'; } 
+            else if (value === 'blur') {
+                bgWrapper.style.backdropFilter = 'blur(12px) brightness(0.9)'; bgWrapper.style.webkitBackdropFilter = 'blur(12px) brightness(0.9)';
+                bgWrapper.style.webkitMaskImage = 'radial-gradient(circle at 50% 55%, transparent 25%, black 70%)';
+                bgWrapper.style.maskImage = 'radial-gradient(circle at 50% 55%, transparent 25%, black 70%)';
+            } else if (value.startsWith('custom_')) {
+                const slotId = value.split('_')[1]; const imgSrc = localStorage.getItem(`saved_bg_custom_src_${slotId}`);
+                if (imgSrc) {
+                    bgWrapper.style.backgroundImage = `url('${imgSrc}')`;
+                    bgWrapper.style.webkitMaskImage = 'radial-gradient(circle at 50% 50%, transparent 30%, black 65%)';
+                    bgWrapper.style.maskImage = 'radial-gradient(circle at 50% 50%, transparent 30%, black 65%)';
+                } else { bgWrapper.remove(); }
+            } else if (bgImages[value]) {
+                bgWrapper.style.backgroundImage = `url('${bgImages[value]}')`;
+                bgWrapper.style.webkitMaskImage = 'radial-gradient(circle at 50% 50%, transparent 30%, black 65%)';
+                bgWrapper.style.maskImage = 'radial-gradient(circle at 50% 50%, transparent 30%, black 65%)';
+            }
+        }
+
+        // =========================================================================
+        // GEOMETRİK BEYAZ TAHTA MOTORU
+        // =========================================================================
+        function setupWhiteboardEngine() {
+            const resizeBoard = () => {
+                const rect = whiteboardCanvas.parentElement.getBoundingClientRect();
+                whiteboardCanvas.width = rect.width; whiteboardCanvas.height = rect.height; redrawWhiteboardFromHistory();
+            };
+            window.addEventListener('resize', resizeBoard);
+            document.getElementById('view-board-btn').onclick = () => {
+                document.getElementById('whiteboard-container').classList.remove('hidden');
+                document.getElementById('view-board-btn').className = "bg-emerald-500 text-white px-5 h-11 rounded-lg text-sm font-bold flex items-center shadow-md transition-all tracking-wide";
+                document.getElementById('view-grid-btn').className = "text-slate-400 hover:text-white px-5 h-11 rounded-lg text-sm font-bold flex items-center transition-all tracking-wide";
+                resizeBoard();
+            };
+            document.getElementById('view-grid-btn').onclick = () => {
+                document.getElementById('whiteboard-container').classList.add('hidden');
+                document.getElementById('view-grid-btn').className = "bg-emerald-500 text-white px-5 h-11 rounded-lg text-sm font-bold flex items-center shadow-md transition-all tracking-wide";
+                document.getElementById('view-board-btn').className = "text-slate-400 hover:text-white px-5 h-11 rounded-lg text-sm font-bold flex items-center transition-all tracking-wide";
+            };
+            document.querySelectorAll('.wb-tool').forEach(btn => {
+                btn.onclick = () => { document.querySelectorAll('.wb-tool').forEach(b => b.classList.remove('active')); btn.classList.add('active'); currentTool = btn.dataset.tool; };
+            });
+            document.querySelectorAll('.wb-color').forEach(btn => {
+                btn.onclick = () => { document.querySelectorAll('.wb-color').forEach(b => b.classList.remove('active', 'border-slate-400')); btn.classList.add('active'); currentColor = btn.dataset.color; };
+            });
+            document.getElementById('custom-color-picker').oninput = (e) => { currentColor = e.target.value; document.querySelectorAll('.wb-color').forEach(b => b.classList.remove('active')); };
+            document.getElementById('clear-board-btn').onclick = async () => {
+                if (confirm("Tahtayı herkes için temizlemek istiyor musunuz?")) {
+                    dbWhiteboardHistory = []; wbSaveBuffer = []; boardCtx.clearRect(0, 0, whiteboardCanvas.width, whiteboardCanvas.height);
+                    p2pChannel.send({ type: 'broadcast', event: 'clear-board-signal', payload: {} });
+                    try { await supabaseClient.from('talk_whiteboard').delete().eq('room_id', currentRoomId); } catch(e){}
+                }
+            };
+
+            const getPos = e => {
+                const rect = whiteboardCanvas.getBoundingClientRect();
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                return { x: clientX - rect.left, y: clientY - rect.top };
+            };
+
+            const drawStart = e => { if (currentRoomId === "") return; isDrawing = true; const p = getPos(e); startX = p.x; startY = p.y; wbSnapshot = boardCtx.getImageData(0,0,whiteboardCanvas.width,whiteboardCanvas.height); };
+            const drawMove = e => {
+                if (!isDrawing) return; e.preventDefault(); const p = getPos(e);
+                if (currentTool !== 'pen' && currentTool !== 'eraser' && wbSnapshot) boardCtx.putImageData(wbSnapshot, 0, 0);
+                boardCtx.strokeStyle = currentTool === 'eraser' ? '#ffffff' : currentColor;
+                boardCtx.lineWidth = currentTool === 'eraser' ? 30 : 4; boardCtx.lineCap = 'round'; boardCtx.lineJoin = 'round';
+
+                if (currentTool === 'pen' || currentTool === 'eraser') {
+                    boardCtx.beginPath(); boardCtx.moveTo(startX, startY); boardCtx.lineTo(p.x, p.y); boardCtx.stroke();
+                    pushStrokeToBuffer('line', startX, startY, p.x, p.y, boardCtx.strokeStyle, boardCtx.lineWidth);
+                    startX = p.x; startY = p.y;
+                } else if (currentTool === 'rect') { boardCtx.strokeRect(startX, startY, p.x - startX, p.y - startY); } 
+                else if (currentTool === 'circle') {
+                    boardCtx.beginPath(); const r = Math.sqrt(Math.pow(p.x-startX,2)+Math.pow(p.y-startY,2));
+                    boardCtx.arc(startX, startY, r, 0, 2*Math.PI); boardCtx.stroke();
+                } else if (currentTool === 'line') { boardCtx.beginPath(); boardCtx.moveTo(startX, startY); boardCtx.lineTo(p.x, p.y); boardCtx.stroke(); }
+            };
+            const drawEnd = e => {
+                if (!isDrawing) return; isDrawing = false; const p = getPos(e);
+                if (currentTool !== 'pen' && currentTool !== 'eraser') { pushStrokeToBuffer(currentTool, startX, startY, p.x, p.y, currentColor, 4); }
+                wbSnapshot = null;
+            };
+            whiteboardCanvas.addEventListener('mousedown', drawStart); whiteboardCanvas.addEventListener('mousemove', drawMove); window.addEventListener('mouseup', drawEnd);
+            whiteboardCanvas.addEventListener('touchstart', drawStart); whiteboardCanvas.addEventListener('touchmove', drawMove); window.addEventListener('touchend', drawEnd);
+        }
+
+        function pushStrokeToBuffer(tool, x1, y1, x2, y2, color, thickness) {
+            const item = { room_id: currentRoomId, sender: myClientId, tool: tool, x1: x1/whiteboardCanvas.width, y1: y1/whiteboardCanvas.height, x2: x2/whiteboardCanvas.width, y2: y2/whiteboardCanvas.height, color: color, thickness: thickness };
+            wbSaveBuffer.push(item);
+        }
+
+        async function flushWhiteboardBuffer() {
+            if (wbSaveBuffer.length === 0) return;
+            const batch = [...wbSaveBuffer]; wbSaveBuffer = [];
+            try { await supabaseClient.from('talk_whiteboard').insert(batch); } catch (err) { console.log(err); }
+        }
+
+        function remoteDrawAction(s) {
+            boardCtx.strokeStyle = s.color; boardCtx.lineWidth = s.thickness; boardCtx.lineCap = 'round'; boardCtx.lineJoin = 'round';
+            const w = whiteboardCanvas.width; const h = whiteboardCanvas.height;
+            boardCtx.beginPath();
+            if (s.tool === 'line' || s.tool === 'pen' || s.tool === 'eraser') { boardCtx.moveTo(s.x1 * w, s.y1 * h); boardCtx.lineTo(s.x2 * w, s.y2 * h); boardCtx.stroke(); } 
+            else if (s.tool === 'rect') { boardCtx.strokeRect(s.x1 * w, s.y1 * h, (s.x2 - s.x1) * w, (s.y2 - s.y1) * h); } 
+            else if (s.tool === 'circle') {
+                const r = Math.sqrt(Math.pow((s.x2-s.x1)*w, 2) + Math.pow((s.y2-s.y1)*h, 2));
+                boardCtx.arc(s.x1 * w, s.y1 * h, r, 0, 2*Math.PI); boardCtx.stroke();
+            }
+        }
+
+        function redrawWhiteboardFromHistory() { if (!whiteboardCanvas.width) return; boardCtx.clearRect(0, 0, whiteboardCanvas.width, whiteboardCanvas.height); dbWhiteboardHistory.forEach(remoteDrawAction); }
+
+        // =========================================================================
+        // KURULUM VE BAŞLATICI ASENKRON DÖNGÜ
+        // =========================================================================
+        const initInterval = setInterval(() => {
+            createUiElements();
+            const grid = document.getElementById('bg-options-grid');
+            if (grid && filterSelect) {
+                refreshCustomBackgroundsUI();
+                grid.querySelectorAll('[data-bg]').forEach(btn => {
+                    btn.onclick = function(e) { e.stopPropagation(); syncSelection(btn.dataset.bg); };
+                });
+                filterSelect.onchange = function() { syncSelection(filterSelect.value); };
+
+                const fileInput = document.getElementById('bg-custom-file');
+                if (fileInput) {
+                    fileInput.onchange = function(e) {
+                        const file = e.target.files[0]; if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = function(event) {
+                            let targetSlot = 1;
+                            for (let i = 1; i <= 5; i++) {
+                                if (!localStorage.getItem(`saved_bg_custom_src_${i}`)) { targetSlot = i; break; }
+                                targetSlot = i;
+                            }
+                            localStorage.setItem(`saved_bg_custom_src_${targetSlot}`, event.target.result);
+                            refreshCustomBackgroundsUI(); syncSelection(`custom_${targetSlot}`);
+                        };
+                        reader.readAsDataURL(file);
                     };
-                    reader.readAsDataURL(file);
-                };
-            }
-            
-            // WebRTC'ye işlenmiş görüntüyü gönderebilmek için localStream video track'ini canvas ile değiştiriyoruz
-            setTimeout(() => {
-                if (typeof localStream !== 'undefined' && localStream) {
-                    const canvasStream = outputCanvas.captureStream(30);
-                    const newVideoTrack = canvasStream.getVideoTracks()[0];
-                    const oldVideoTrack = localStream.getVideoTracks()[0];
-                    if (oldVideoTrack && newVideoTrack) {
-                        localStream.removeTrack(oldVideoTrack);
-                        localStream.addTrack(newVideoTrack);
-                        // Mevcut aktif P2P bağlantılarındaki track'leri güncelle
-                        Object.keys(peerConnections).forEach(id => {
-                            const senders = peerConnections[id].getSenders();
-                            const sender = senders.find(s => s.track && s.track.kind === 'video');
-                            if (sender) sender.replaceTrack(newVideoTrack);
-                        });
-                    }
                 }
-            }, 2000);
-        })();
+                const savedType = localStorage.getItem('saved_bg_type');
+                if (savedType) { syncSelection(savedType); }
+                clearInterval(initInterval);
+            }
+        }, 500);
     </script>
 </body>
 </html>
