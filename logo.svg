@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" width="100%" height="100%">
+  <defs>
+    <!-- Arka Plan Yeşil Gradyanı -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10B981" />
+      <stop offset="100%" stop-color="#059669" />
+    </linearGradient>
+
+    <!-- M Harfi Mavi Gradyanı -->
+    <linearGradient id="blueGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3B82F6" />
+      <stop offset="100%" stop-color="#1D4ED8" />
+    </linearGradient>
+
+    <!-- 3D Vurgu Gradyanı -->
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#60A5FA" />
+      <stop offset="100%" stop-color="#2563EB" />
+    </linearGradient>
+
+    <!-- Gölge Efekti -->
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#000000" flood-opacity="0.18" />
+    </filter>
+  </defs>
+
+  <!-- Yeşil Arka Plan -->
+  <rect width="800" height="800" rx="120" fill="url(#bgGrad)" />
+
+  <!-- Posta & M Harfi İkonu -->
+  <g filter="url(#shadow)" transform="translate(0, -15)">
+    <!-- Posta Zarfı Arka Şeffaf Katman -->
+    <rect x="200" y="220" width="400" height="280" rx="40" fill="#FFFFFF" opacity="0.15" />
+
+    <!-- Modern Kıvrımlı M Harfi -->
+    <path d="M 250,470 L 250,290 C 250,260 275,240 305,240 C 325,240 342,250 352,268 L 400,350 L 448,268 C 458,250 475,240 495,240 C 525,240 550,260 550,290 L 550,470 C 550,492 532,510 510,510 C 488,510 470,492 470,470 L 470,340 L 425,418 C 412,440 388,440 375,418 L 330,340 L 330,470 C 330,492 312,510 290,510 C 268,510 250,492 250,470 Z" fill="url(#blueGrad)" />
+
+    <!-- M Harfi Üst Işık Vurgusu -->
+    <path d="M 305,240 C 325,240 342,250 352,268 L 400,350 L 448,268 C 458,250 475,240 495,240 C 510,240 523,246 533,256 C 522,246 507,240 490,240 C 472,240 456,250 446,266 L 400,345 L 354,266 C 344,250 328,240 310,240 C 293,240 278,246 267,256 C 277,246 290,240 305,240 Z" fill="url(#accentGrad)" opacity="0.9" />
+  </g>
+
+  <!-- Yazı -->
+  <text x="400" y="660" text-anchor="middle" font-family="system-ui, -apple-system, BlinkMacSystemFont, &#39;Segoe UI&#39;, Roboto, sans-serif" font-weight="800" font-size="58" letter-spacing="0.5" fill="#FFFFFF">
+    Mailmaster<tspan fill="#E0F2FE">Talk</tspan>
+  </text>
+</svg>
